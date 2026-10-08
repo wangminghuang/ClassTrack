@@ -117,7 +117,7 @@ describe('课程格的出勤外观', () => {
     expect(render({ mark: notedMark, attendanceEnabled: false })).toContain('带实验报告')
   })
 
-  it('非本周课走灰色淡化，不叠加出勤痕迹（即使标记为未上）', () => {
+  it('非本周课使用课程对应的淡化色，不叠加出勤痕迹（即使标记为未上）', () => {
     const html = render({ mark: absentMark, attendanceEnabled: true, isOutOfWeek: true })
 
     expect(html).toContain('data-course-out-of-week')

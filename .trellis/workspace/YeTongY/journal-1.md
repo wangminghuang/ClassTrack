@@ -934,3 +934,40 @@ PR #24 已合并（master 4bc9973）。两处独立修复：① lastCheckAt 语�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 29: 课程配色选择与前台更新检查
+<!-- trellis-session: v=2 fp=195afa88385f8dbb -->
+
+**Date**: 2026-10-08
+**Task**: 课程配色选择与前台更新检查
+**Branch**: `feat/course-palette-and-update-check`
+
+### Summary
+
+保留新旧课程配色，个人中心可选择及预览，默认原配色；修复仓库迁移后发布链接被旧白名单过滤的问题，自动更新固定前台每6小时检查，仅弹模态框，不发通知。
+
+### Main Changes
+
+- 新色板仅调整两档及其淡化色，选择持久化，历史课程分配规则保持。
+- 更新API及发布页白名单同步仓库新地址；旧设备间隔统一6小时，移除通知和权限调用，支持关闭自动检查后手动检查，增加15秒超时。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `41edcfc` | feat(schedule): 支持新旧课程配色选择与预览 |
+| `ccb24fb` | fix(update): 修复发布地址并改为前台每六小时检查 |
+
+### Testing
+
+- [OK] 401项测试通过，typecheck、lint、format:check、build与git diff --check通过。
+- [OK] 重放20条真实GitHub发布数据，识别1.0.27-beta；浏览器模拟验证后台结果不弹框、回前台提示、6小时调度、手动检查及无通知插件调用。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Android原生生命周期尚需真机验收。

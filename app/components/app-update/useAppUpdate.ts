@@ -1,73 +1,34 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect } from 'react'
 import { toast } from 'sonner'
 import { UPDATE_CHANNEL_LABELS } from '~/lib/app-update/channels'
 import type { UpdateCandidate, UpdateChannel } from '~/lib/app-update/channels'
 import { runUpdateCheck } from '~/lib/app-update/check'
 import { fetchReleaseCandidates } from '~/lib/app-update/releases-api'
-import type { CheckInterval } from '~/lib/app-update/schedule'
-import {
-  addAppResumeListener,
-  readAppVersionInfo,
-  openNotificationSettings,
-  readNotificationPermission,
-  requestNotificationPermission,
-  sendUpdateNotification,
-} from '~/lib/app-update/native-update'
-import type { NotificationPermission } from '~/lib/app-update/native-update'
+import { nextCheckDelay } from '~/lib/app-update/schedule'
+import { addAppStateListener, readAppIsActive, readAppVersionInfo } from '~/lib/app-update/native-update'
 import { isAndroidApp } from '~/lib/native-platform'
 import { useUpdateStore } from '~/store/updateStore'
 
-/**
- * 更新检测的 React 侧入口。
- *
- * 两个消费方共用它：
- * - `UpdateCheckRunner`（挂在 `app/root.tsx`）传 `autoCheck: true`，负责冷启动 / 回前台的自动检查；
- * - `AppUpdateSettings`（个人中心）不传，只用设置项、通知权限与「立即检查」。
- *
- * 自动检查**只由 Runner 那一份实例驱动**（`autoCheck` 选项），否则设置页一打开就会多跑一轮调度。
- *
- * 这个 hook 只做三件事：平台/DEV 判定、`isChecking` 标志、把检查结果翻成 UI 副作用。
- * 「什么时候该联网、什么时候算成功、成功才记账」全在 `app/lib/app-update/check.ts` 与
- * `schedule.ts` 这两个可单测的模块里 —— 调度缺陷（2026-09-28：回到前台永远不检查）正是从那里修的。
- */
-
 export type AppUpdateApi = {
-  /** 当前环境是否支持更新检测（仅 Android 原生为真）。 */
   supported: boolean
-  /** 当前安装版本名；从原生读到之前为 `null`。 */
+  isAppActive: boolean
   currentVersion: string | null
-  /** 版本信息读不到（插件不可用）：整张设置卡片与模态框都不该出现（prd F1）。 */
   versionUnavailable: boolean
-  /** 已播种的更新通道；`null` 表示还没读到版本名。 */
   channel: UpdateChannel | null
-  /** 通道的中文名，供只读展示。 */
   channelLabel: string
   autoCheck: boolean
-  notify: boolean
-  interval: CheckInterval
   isChecking: boolean
-  /** 上一次**成功**拿到结果的时间；`null` 表示还没成功过。 */
   lastCheckAt: number | null
-  /** 系统通知权限；未查询到时为 `null`。 */
-  notificationPermission: NotificationPermission | null
-  /** 待提示的候选版本；模态框由 `UpdateCheckRunner` 渲染。 */
   candidate: UpdateCandidate | null
   setChannel: (channel: UpdateChannel) => void
   setAutoCheck: (enabled: boolean) => void
-  setNotifyEnabled: (enabled: boolean) => Promise<void>
-  setCheckInterval: (interval: CheckInterval) => void
-  /** 手动检查：忽略间隔与「跳过此版本」，并且不发通知（用户正看着界面，不需要第二条提醒）。 */
   checkNow: () => Promise<void>
-  /** 「稍后」：关掉模态框，下次检查仍会提示。 */
   dismissCandidate: () => void
-  /** 「跳过此版本」：永久不再自动提示这个版本。 */
   skipCandidate: () => void
-  /** 「前往系统设置」：拉起本应用的通知设置页；返回 `false` 表示这个 ROM 没有对应页面。 */
-  openNotificationSettings: () => Promise<boolean>
 }
 
 type UseAppUpdateOptions = {
-  /** 是否由这个实例驱动自动检查（只有挂在根组件的那一份该传 `true`）。 */
+  /** 仅根组件 Runner 驱动生命周期与定时检查，设置卡片只消费状态。 */
   autoCheck?: boolean
 }
 
@@ -75,52 +36,35 @@ export function useAppUpdate({ autoCheck = false }: UseAppUpdateOptions = {}): A
   const supported = isAndroidApp()
   const channel = useUpdateStore((state) => state.channel)
   const autoCheckEnabled = useUpdateStore((state) => state.autoCheck)
-  const notify = useUpdateStore((state) => state.notify)
   const interval = useUpdateStore((state) => state.interval)
   const lastCheckAt = useUpdateStore((state) => state.lastCheckAt)
+  const lastAttemptAt = useUpdateStore((state) => state.lastAttemptAt)
   const currentVersion = useUpdateStore((state) => state.currentVersion)
   const versionUnavailable = useUpdateStore((state) => state.versionUnavailable)
   const isChecking = useUpdateStore((state) => state.isChecking)
+  const isAppActive = useUpdateStore((state) => state.isAppActive)
   const candidate = useUpdateStore((state) => state.pendingCandidate)
   const setChannel = useUpdateStore((state) => state.setChannel)
   const setAutoCheck = useUpdateStore((state) => state.setAutoCheck)
-  const setCheckInterval = useUpdateStore((state) => state.setCheckInterval)
 
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | null>(null)
-
-  /**
-   * 读安装包版本并播种通道。
-   *
-   * 播种只发生在这里，而且 `seedChannelOnce` 内部判「存储里有没有值」——
-   * 所以测试版包升级成正式版包之后通道仍是「全部」，不会被安装包类型改写。
-   */
   const loadVersion = useCallback(async (): Promise<string | null> => {
     const info = await readAppVersionInfo()
-    if (!info) {
-      useUpdateStore.getState().setVersionUnavailable(true)
-      return null
-    }
-
     const store = useUpdateStore.getState()
+    store.setVersionUnavailable(!info)
+    if (!info) return null
     store.setCurrentVersion(info.version)
     store.seedChannelOnce(info.version)
-
     return info.version
   }, [])
 
   const runCheck = useCallback(
     async (manual: boolean) => {
       const store = useUpdateStore.getState()
-      if (!supported || !store.autoCheck) return
-
-      // 开发环境不打真接口：热更新会让这个 effect 反复触发，徒增噪声。手动检查仍然可用。
+      if (!supported || !store.isAppActive || store.isChecking || (!manual && !store.autoCheck)) return
       if (!manual && import.meta.env.DEV) return
 
-      // 只有**真正开始**这一轮检查的调用才允许动 `isChecking`：被闸门拦下的调用如果也在 finally 里
-      // 清标志，会把正在跑的那一轮误标成「已结束」—— 按钮提前解禁，还会放进第三个并发请求。
-      const ownsFlag = !store.isChecking
-      if (ownsFlag) store.setIsChecking(true)
-
+      // 先取得所有权，再 await；其它入口不能清除此轮检查的标志。
+      store.setIsChecking(true)
       try {
         const outcome = await runUpdateCheck({
           manual,
@@ -139,33 +83,17 @@ export function useAppUpdate({ autoCheck = false }: UseAppUpdateOptions = {}): A
           markChecked: store.markChecked,
           fetchCandidates: fetchReleaseCandidates,
         })
-
-        if (outcome.kind === 'failed') {
-          if (manual) toast.error('检查更新失败，请稍后再试')
-          return
-        }
-
-        if (outcome.kind === 'up-to-date') {
-          if (manual) toast.success('已是最新版本')
-          return
-        }
-
-        if (outcome.kind !== 'found') return
-
         const latest = useUpdateStore.getState()
-        latest.setPendingCandidate(outcome.candidate)
-        if (manual || !latest.notify) return
-
-        // 首次要发通知时申请权限（Android 13+）。被拒时不改开关：用户没有做任何操作，
-        // 静默把开关翻成关会让人莫名；设置页会显示「系统通知权限未开启」的提示。
-        let permission = await readNotificationPermission()
-        if (permission === 'prompt') permission = await requestNotificationPermission()
-        setNotificationPermission(permission)
-        if (permission !== 'granted') return
-
-        await sendUpdateNotification(outcome.candidate.version)
+        if (outcome.kind === 'found') {
+          // 请求中退后台时保留候选，Runner 回前台才渲染；全程不发系统通知。
+          if (manual || latest.autoCheck) latest.setPendingCandidate(outcome.candidate)
+        } else if (manual && latest.isAppActive) {
+          if (outcome.kind === 'failed') toast.error('检查更新失败，请稍后再试')
+          if (outcome.kind === 'version-unavailable') toast.error('无法读取当前版本，请稍后再试')
+          if (outcome.kind === 'up-to-date') toast.success('已是最新版本')
+        }
       } finally {
-        if (ownsFlag) useUpdateStore.getState().setIsChecking(false)
+        useUpdateStore.getState().setIsChecking(false)
       }
     },
     [loadVersion, supported]
@@ -173,81 +101,47 @@ export function useAppUpdate({ autoCheck = false }: UseAppUpdateOptions = {}): A
 
   useEffect(() => {
     if (!autoCheck || !supported) return
-
-    let active = true
-    const listener = addAppResumeListener(() => {
-      void runCheck(false)
+    let disposed = false
+    let receivedStateEvent = false
+    const listener = addAppStateListener((active) => {
+      receivedStateEvent = true
+      if (!disposed) useUpdateStore.getState().setAppActive(active)
     })
-
-    void loadVersion().then((version) => {
-      if (active && version) void runCheck(false)
+    void listener.then(async () => {
+      const active = await readAppIsActive()
+      // 异步读取不能覆盖更晚收到的原生生命周期事件。
+      if (!disposed && !receivedStateEvent && active !== null) useUpdateStore.getState().setAppActive(active)
     })
-
+    void loadVersion()
     return () => {
-      active = false
+      disposed = true
       void listener.then((handle) => handle?.remove())
     }
-  }, [autoCheck, supported, loadVersion, runCheck])
+  }, [autoCheck, supported, loadVersion])
 
   useEffect(() => {
-    if (!supported) return
-    // 用 `.then(setState)` 而不是调用一个内部 setState 的 async 函数：本仓库把「effect 内同步 setState」
-    // 设为 error（react-hooks/set-state-in-effect），回调形态既满足规则，也让 setState 发生在挂载之后。
-    void readNotificationPermission().then(setNotificationPermission)
+    if (!autoCheck || !supported || !isAppActive || !autoCheckEnabled || isChecking || versionUnavailable || currentVersion === null) return
+    if (import.meta.env.DEV) return
+    // 冷启动、回前台和持续前台共用同一到期时间；退后台时清理定时器。
+    const delay = nextCheckDelay({ interval, lastCheckAt, lastAttemptAt, now: Date.now() })
+    const timer = window.setTimeout(() => void runCheck(false), delay)
+    return () => window.clearTimeout(timer)
+  }, [
+    autoCheck,
+    supported,
+    isAppActive,
+    autoCheckEnabled,
+    isChecking,
+    versionUnavailable,
+    currentVersion,
+    interval,
+    lastCheckAt,
+    lastAttemptAt,
+    runCheck,
+  ])
 
-    // 用户可能刚在系统设置里改完通知权限，回到前台要重新查一次（与 useWidgetPrecision 同一处理）。
-    const listener = addAppResumeListener(() => {
-      void readNotificationPermission().then(setNotificationPermission)
-    })
-
-    return () => {
-      void listener.then((handle) => handle?.remove())
-    }
-  }, [supported])
-
-  const setNotifyEnabled = useCallback(async (enabled: boolean) => {
-    const store = useUpdateStore.getState()
-    if (!enabled) {
-      store.setNotify(false)
-      return
-    }
-
-    const permission = await requestNotificationPermission()
-    setNotificationPermission(permission)
-
-    if (permission === 'granted') {
-      store.setNotify(true)
-      return
-    }
-
-    // 被拒就把开关退回关闭（prd F5），避免开关显示「开」而实际发不出任何东西。
-    store.setNotify(false)
-    toast.error('通知权限被拒绝。请在系统设置 → 应用 → ClassTrack → 通知里允许。')
-  }, [])
-
-  const checkNow = useCallback(async () => {
-    const store = useUpdateStore.getState()
-    // 总开关关闭时连手动检查也不联网（prd F2）。
-    if (!store.autoCheck) {
-      toast.error('自动检查更新已关闭，请先打开开关')
-      return
-    }
-
-    await runCheck(true)
-  }, [runCheck])
-
-  const dismissCandidate = useCallback(() => {
-    useUpdateStore.getState().setPendingCandidate(null)
-  }, [])
-
-  const openNotificationSettingsFromSettings = useCallback(async (): Promise<boolean> => {
-    const launched = await openNotificationSettings()
-    if (!launched) {
-      // 少数 ROM 没有这一页：如实给出手动路径，而不是让按钮点了没反应。
-      toast.error('没能打开系统设置页，请手动进入「系统设置 → 应用 → ClassTrack → 通知」。')
-    }
-    return launched
-  }, [])
+  const checkNow = useCallback(() => runCheck(true), [runCheck])
+  const dismissCandidate = useCallback(() => useUpdateStore.getState().setPendingCandidate(null), [])
   const skipCandidate = useCallback(() => {
     const store = useUpdateStore.getState()
     if (store.pendingCandidate) store.skipVersion(store.pendingCandidate.version)
@@ -256,24 +150,19 @@ export function useAppUpdate({ autoCheck = false }: UseAppUpdateOptions = {}): A
 
   return {
     supported,
+    isAppActive,
     currentVersion,
     versionUnavailable,
     channel,
     channelLabel: channel ? UPDATE_CHANNEL_LABELS[channel] : '未设置',
     autoCheck: autoCheckEnabled,
-    notify,
-    interval,
     isChecking,
     lastCheckAt,
-    notificationPermission,
     candidate,
     setChannel,
     setAutoCheck,
-    setNotifyEnabled,
-    setCheckInterval,
     checkNow,
     dismissCandidate,
     skipCandidate,
-    openNotificationSettings: openNotificationSettingsFromSettings,
   }
 }

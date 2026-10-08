@@ -30,7 +30,7 @@ async function run(overrides: Partial<RunUpdateCheckArgs> = {}) {
     manual: false,
     supported: true,
     autoCheckEnabled: true,
-    interval: '1h',
+    interval: '6h',
     lastCheckAt: null,
     lastAttemptAt: null,
     inFlight: false,
@@ -138,8 +138,8 @@ describe('闸门：什么时候根本不该联网', () => {
     expect(fetchCandidates).not.toHaveBeenCalled()
   })
 
-  it('总开关关闭 → 连手动检查也不联网', async () => {
-    const { outcome, fetchCandidates } = await run({ manual: true, autoCheckEnabled: false })
+  it('自动检查关闭 → 不自动联网', async () => {
+    const { outcome, fetchCandidates } = await run({ autoCheckEnabled: false })
 
     expect(outcome).toEqual({ kind: 'skipped' })
     expect(fetchCandidates).not.toHaveBeenCalled()
@@ -154,10 +154,21 @@ describe('闸门：什么时候根本不该联网', () => {
 })
 
 describe('手动检查', () => {
+  it('自动检查关闭也能手动检查', async () => {
+    const { outcome, fetchCandidates } = await run({ manual: true, autoCheckEnabled: false })
+    expect(fetchCandidates).toHaveBeenCalledOnce()
+    expect(outcome.kind).toBe('found')
+  })
+  it('手动检查也不能绕过正在进行的检查', async () => {
+    const { outcome, fetchCandidates } = await run({ manual: true, inFlight: true })
+    expect(outcome.kind).toBe('skipped')
+    expect(fetchCandidates).not.toHaveBeenCalled()
+  })
+
   it('忽略间隔与冷却', async () => {
     const { outcome, fetchCandidates } = await run({
       manual: true,
-      interval: '7d',
+      interval: '6h',
       lastCheckAt: NOW - 1000,
       lastAttemptAt: NOW - 1000,
     })

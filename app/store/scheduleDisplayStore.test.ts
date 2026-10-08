@@ -11,6 +11,7 @@ describe('scheduleDisplayStore', () => {
     expect(state.collapseEmptyWeekdayColumns).toBe(false)
     // 「左右边缘滑动切换周」是补强手势（滑到边缘才有反应），默认开启
     expect(state.edgeSwipeWeekSwitch).toBe(true)
+    expect(state.coursePalette).toBe('original')
   })
 
   it('开关可切换', () => {
@@ -44,7 +45,7 @@ describe('scheduleDisplayStore', () => {
     expect(useScheduleDisplayStore.getState().edgeSwipeWeekSwitch).toBe(true)
   })
 
-  it('持久化白名单包含四个显示开关（漏一个会让旧数据丢值）', () => {
+  it('持久化白名单包含显示开关与课程配色（漏一个会让刷新后丢值）', () => {
     const partialize = scheduleDisplayPersistOptions.partialize
 
     expect(partialize).toBeTypeOf('function')
@@ -53,7 +54,7 @@ describe('scheduleDisplayStore', () => {
 
     expect(persisted).toBeDefined()
     expect(Object.keys(persisted ?? {}).sort()).toEqual(
-      ['collapseEmptyWeekdayColumns', 'showAttendanceStatus', 'showOutOfWeekCourses', 'edgeSwipeWeekSwitch'].sort()
+      ['coursePalette', 'collapseEmptyWeekdayColumns', 'showAttendanceStatus', 'showOutOfWeekCourses', 'edgeSwipeWeekSwitch'].sort()
     )
     expect(persisted?.collapseEmptyWeekdayColumns).toBe(false)
     expect(persisted?.edgeSwipeWeekSwitch).toBe(true)
@@ -97,5 +98,36 @@ describe('scheduleDisplayStore', () => {
 
   it('持久化 key 保持 class-track-schedule-display（不能混进业务 store）', () => {
     expect(scheduleDisplayPersistOptions.name).toBe('class-track-schedule-display')
+  })
+
+  it('两种配色都能切换，并在保存和重新合并后保留用户选择', () => {
+    const initial = useScheduleDisplayStore.getState().coursePalette
+    const partialize = scheduleDisplayPersistOptions.partialize
+    const merge = scheduleDisplayPersistOptions.merge
+
+    for (const palette of ['original', 'adjusted'] as const) {
+      useScheduleDisplayStore.getState().setCoursePalette(palette)
+      const state = useScheduleDisplayStore.getState()
+      const persisted = partialize?.(state)
+      const restored = merge?.(persisted, { ...state, coursePalette: palette === 'original' ? 'adjusted' : 'original' })
+
+      expect(state.coursePalette).toBe(palette)
+      expect(persisted?.coursePalette).toBe(palette)
+      expect(restored).toMatchObject({ coursePalette: palette })
+      expect(state.edgeSwipeWeekSwitch).toBe(true)
+    }
+
+    useScheduleDisplayStore.getState().setCoursePalette(initial)
+  })
+
+  it('旧数据缺少配色或存储了非法配色时使用默认值，原配色选择不会被默认值覆盖', () => {
+    const current = useScheduleDisplayStore.getState()
+    const merge = scheduleDisplayPersistOptions.merge
+
+    for (const value of [undefined, null, 'unknown', 2]) {
+      expect(merge?.({ coursePalette: value }, current)).toMatchObject({ coursePalette: current.coursePalette })
+    }
+    expect(merge?.({ showOutOfWeekCourses: true }, current)).toMatchObject({ coursePalette: current.coursePalette })
+    expect(merge?.({ coursePalette: 'original' }, current)).toMatchObject({ coursePalette: 'original' })
   })
 })

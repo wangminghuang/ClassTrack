@@ -2,6 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/com
 import { Switch } from '~/components/ui/switch'
 import { useAttendanceStore } from '~/store/attendanceStore'
 import { useScheduleDisplayStore } from '~/store/scheduleDisplayStore'
+import CoursePalettePicker from './CoursePalettePicker'
 
 export default function ScheduleDisplaySettings() {
   // 出勤痕迹是两层开关：能力层（出勤统计）关掉时，这一层的出勤开关就没有可显示的东西，
@@ -20,7 +21,7 @@ export default function ScheduleDisplaySettings() {
     <Card id="card-schedule-display">
       <CardHeader>
         <CardTitle>课表显示</CardTitle>
-        <CardDescription>调整课表课程格子上显示的信息。</CardDescription>
+        <CardDescription>调整课表的信息显示与课程配色。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         {attendanceEnabled && (
@@ -89,6 +90,7 @@ export default function ScheduleDisplaySettings() {
             aria-label="左右边缘滑动切换周"
           />
         </div>
+        <CoursePalettePicker />
       </CardContent>
     </Card>
   )

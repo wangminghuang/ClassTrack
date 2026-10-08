@@ -60,6 +60,7 @@ export default function ScheduleTable({
 
   const collapseEmptyWeekdayColumns = useScheduleDisplayStore((state) => state.collapseEmptyWeekdayColumns)
   const edgeSwipeWeekSwitch = useScheduleDisplayStore((state) => state.edgeSwipeWeekSwitch)
+  const coursePalette = useScheduleDisplayStore((state) => state.coursePalette)
 
   // 手机端课表的横向边缘阻尼手势。桌面端不启用（鼠标拖拽不在需求内），
   // 开关关闭时连监听器都不挂，横滑完全回到改动前的行为。
@@ -239,7 +240,7 @@ export default function ScheduleTable({
                   <ScheduleCourseCell
                     course={course}
                     mark={getClassMark(course.id, currentWeek)}
-                    theme={resolveCourseTheme(course.courseId, courseColorMap, isOutOfWeek)}
+                    theme={resolveCourseTheme(course.courseId, courseColorMap, isOutOfWeek, coursePalette)}
                     attendanceEnabled={attendanceEnabled}
                     isOutOfWeek={isOutOfWeek}
                     onClick={() => onCourseClick(course)}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Class } from '~/lib/types'
-import { buildCourseColorMap, COURSE_COLOR_THEMES, COURSE_OUT_OF_WEEK_THEMES, resolveCourseTheme } from './courseColor'
+import { buildCourseColorMap, COURSE_COLOR_THEMES, COURSE_OUT_OF_WEEK_THEMES, COURSE_PALETTES, resolveCourseTheme } from './courseColor'
 
 function makeClass(courseId: string, id = courseId, weeks = [1, 2]): Class {
   return {
@@ -63,5 +63,40 @@ describe('课程颜色分配回退', () => {
     expect(colorMap.size).toBe(0)
     expect(resolveCourseTheme('1002', colorMap, false)).toEqual(COURSE_COLOR_THEMES[0])
     expect(resolveCourseTheme('1002', colorMap, true)).toEqual(COURSE_OUT_OF_WEEK_THEMES[0])
+  })
+})
+
+describe('两套课表配色', () => {
+  it('新配色只调整紫蓝和浅粉两个档位，保留其余六种原色及淡化色', () => {
+    const { original, adjusted } = COURSE_PALETTES
+
+    expect(original.themes).toEqual(COURSE_COLOR_THEMES)
+    expect(original.outOfWeekThemes).toEqual(COURSE_OUT_OF_WEEK_THEMES)
+    expect(adjusted.themes).toHaveLength(8)
+    expect(adjusted.outOfWeekThemes).toHaveLength(8)
+    expect(adjusted.themes.flatMap((theme, index) => (theme.surface === original.themes[index].surface ? [] : [index]))).toEqual([2, 5])
+    expect(
+      adjusted.outOfWeekThemes.flatMap((theme, index) => (theme.surface === original.outOfWeekThemes[index].surface ? [] : [index]))
+    ).toEqual([2, 5])
+    expect(adjusted.themes[2].surface).toBe('bg-[#a7cc8a]')
+    expect(adjusted.themes[5].surface).toBe('bg-[#e9a8d2]')
+    expect(adjusted.outOfWeekThemes[2].surface).toBe('bg-[#bbc7b1]')
+    expect(adjusted.outOfWeekThemes[5].surface).toBe('bg-[#e3d0dc]')
+  })
+
+  it('切换配色只改变主题，课程档位和非本周对应关系保持一致', () => {
+    const classes = Array.from({ length: 8 }, (_, index) => makeClass(String(1001 + index * 8)))
+    const colorMap = buildCourseColorMap(classes)
+    const snapshot = Array.from(colorMap)
+
+    for (const paletteId of ['original', 'adjusted'] as const) {
+      const themes = classes.map(({ courseId }) => resolveCourseTheme(courseId, colorMap, false, paletteId))
+      expect(new Set(themes.map((theme) => theme.surface)).size).toBe(8)
+      classes.forEach(({ courseId }, index) => {
+        expect(resolveCourseTheme(courseId, colorMap, true, paletteId)).toEqual(COURSE_PALETTES[paletteId].outOfWeekThemes[index])
+      })
+    }
+
+    expect(Array.from(colorMap)).toEqual(snapshot)
   })
 })

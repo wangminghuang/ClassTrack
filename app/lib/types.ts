@@ -1,3 +1,6 @@
+/** 课表配色偏好：原配色，或只调整相近蓝色与粉色的新配色。 */
+export type CoursePaletteId = 'original' | 'adjusted'
+
 // 解析后的课程数据类型
 export interface Class {
   id: string // 唯一标识符

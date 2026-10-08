@@ -912,3 +912,25 @@ PR #24 已合并（master 4bc9973）。两处独立修复：① lastCheckAt 语�
 ### Next Steps
 
 - 真机触摸验收待补：.trellis/tasks/09-29-schedule-edge-swipe-device-verify（需有 /dev/kvm 的环境）；随后推分支开 PR 到 master
+
+
+## Session 28: 回退课程顺序配色并修复颜色碰撞
+<!-- trellis-session: v=2 fp=74aa90bf87ae35de -->
+
+**Date**: 2026-10-08
+**Task**: 回退课程顺序配色并修复颜色碰撞
+**Branch**: `fix/schedule-color-allocation`
+
+### Summary
+
+恢复 718812f 已有的课程号去重排序、顺序分配与档位 0 兜底，修正恢复目标色板时误引入的哈希碰撞；保持目标色板与对应淡化色。新增 5 项回归用例，全量 41 个文件、393 项测试及 typecheck、lint、format:check、build 通过。历史映射差分一致。修复任务已归档，PR #29：https://github.com/wangminghuang/ClassTrack/pull/29。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `abee4b0` | fix(schedule): 恢复课程顺序配色避免重色 |
+
+### Status
+
+[OK] **Completed**

@@ -29,28 +29,28 @@ export const COURSE_OUT_OF_WEEK_THEMES: CourseColorTheme[] = [
   { surface: 'bg-[#d4c3ae]' },
 ]
 
-/** 旧版以课程号哈希分配颜色，保证同一门课始终使用同一色板档位。 */
-function courseHash(courseId: string): number {
-  let hash = 0
-  for (let index = 0; index < courseId.length; index += 1) {
-    hash = courseId.charCodeAt(index) + ((hash << 5) - hash)
-  }
-  return Math.abs(hash)
-}
-
-/** 为整学期课程构建与旧版一致的 `courseId → 色板档位` 映射。 */
+/**
+ * 恢复 `718812f` 的课程号去重排序、顺序分配规则。
+ *
+ * 同一门课在任意周次和节次都使用同一档位；整学期不超过 8 门时每门课颜色不同，
+ * 超过 8 门时循环复用。哈希取模会让少量不同课程也重色，不能用于该映射。
+ *
+ * @param classes 整个学期的课程列表。
+ * @returns `courseId → 色板档位` 的稳定映射。
+ */
 export function buildCourseColorMap(classes: Class[]): Map<string, number> {
+  const courseIds = Array.from(new Set(classes.map((classItem) => classItem.courseId))).sort((left, right) => left.localeCompare(right))
+
   const colorMap = new Map<string, number>()
-  classes.forEach(({ courseId }) => {
-    if (!colorMap.has(courseId)) {
-      colorMap.set(courseId, courseHash(courseId) % COURSE_COLOR_THEMES.length)
-    }
+  courseIds.forEach((courseId, index) => {
+    colorMap.set(courseId, index % COURSE_COLOR_THEMES.length)
   })
+
   return colorMap
 }
 
-/** 解析课程主题；非本周课使用同一哈希档位对应的淡化色。 */
+/** 解析课程主题；非本周课使用本课相同档位的淡化色，缺失映射沿用历史第一档兜底。 */
 export function resolveCourseTheme(courseId: string, colorMap: Map<string, number>, isOutOfWeek: boolean): CourseColorTheme {
-  const index = colorMap.get(courseId) ?? courseHash(courseId) % COURSE_COLOR_THEMES.length
+  const index = colorMap.get(courseId) ?? 0
   return isOutOfWeek ? COURSE_OUT_OF_WEEK_THEMES[index] : COURSE_COLOR_THEMES[index]
 }

@@ -2,8 +2,7 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { seedChannel } from '~/lib/app-update/channels'
 import type { UpdateCandidate, UpdateChannel } from '~/lib/app-update/channels'
-import type { CheckInterval } from '~/lib/app-update/schedule'
-import { DEFAULT_UPDATE_SETTINGS, applyLegacyIntervalMigration, normalizeUpdateSettings } from '~/lib/app-update/settings'
+import { DEFAULT_UPDATE_SETTINGS, normalizeUpdateSettings } from '~/lib/app-update/settings'
 import type { AppUpdateSettings } from '~/lib/app-update/settings'
 
 /**
@@ -23,6 +22,8 @@ export type { AppUpdateSettings }
 export type AppUpdateSession = {
   /** 当前安装版本名；从原生读到之前为 `null`。 */
   currentVersion: string | null
+  /** 原生前台状态；后台保留候选，但不渲染提示、不启动检查。 */
+  isAppActive: boolean
   /** 版本信息读取失败（插件不可用 / 异常）：此时整个功能静默禁用（prd F1）。 */
   versionUnavailable: boolean
   /** 有一次检查正在进行中。既是设置页的按钮禁用依据，也是重入保护的闸门输入。 */
@@ -36,9 +37,7 @@ type AppUpdateActions = {
   seedChannelOnce: (versionName: string) => void
   setChannel: (channel: UpdateChannel) => void
   setAutoCheck: (enabled: boolean) => void
-  setNotify: (enabled: boolean) => void
-  /** 用户改间隔：同时把间隔「定档」，之后默认值的变化不再改写这台设备。 */
-  setCheckInterval: (interval: CheckInterval) => void
+  setAppActive: (active: boolean) => void
   /** 记「上一次成功拿到结果」（间隔窗口的唯一依据）。失败**不要**调它。 */
   markChecked: (at: number) => void
   /** 记「上一次尝试」（成功失败都调；只为失败后的短冷却服务）。 */
@@ -59,6 +58,7 @@ export const useUpdateStore = create<AppUpdateStore>()(
     (set, get) => ({
       ...SETTINGS_DEFAULTS,
       currentVersion: null,
+      isAppActive: false,
       versionUnavailable: false,
       isChecking: false,
       pendingCandidate: null,
@@ -70,8 +70,7 @@ export const useUpdateStore = create<AppUpdateStore>()(
 
       setChannel: (channel) => set({ channel }),
       setAutoCheck: (enabled) => set({ autoCheck: enabled }),
-      setNotify: (enabled) => set({ notify: enabled }),
-      setCheckInterval: (interval) => set({ interval, intervalPinned: true }),
+      setAppActive: (active) => set({ isAppActive: active }),
       markChecked: (at) => set({ lastCheckAt: at }),
       markAttempted: (at) => set({ lastAttemptAt: at }),
       setCurrentVersion: (version) => set({ currentVersion: version }),
@@ -86,22 +85,19 @@ export const useUpdateStore = create<AppUpdateStore>()(
       partialize: (state) => ({
         channel: state.channel,
         autoCheck: state.autoCheck,
-        notify: state.notify,
         interval: state.interval,
         lastCheckAt: state.lastCheckAt,
         lastAttemptAt: state.lastAttemptAt,
         skippedVersion: state.skippedVersion,
-        intervalPinned: state.intervalPinned,
       }),
       merge: (persistedState, currentState) => ({
         // localStorage 是外部输入：坏值（手改、旧版本、别的应用写的同名键）一律逐字段回落到默认，
         // 而不是让一个非法通道值把检查逻辑带进未定义分支。收窄规则与默认值都在
         // `app/lib/app-update/settings.ts`（由 `settings.test.ts` 钉住）。
         //
-        // 收窄之后再走一次「存量间隔提升」：旧默认值 1 天只改默认值是不够的 ——
-        // 存储里已经有值就用存储值，存量设备会继续按 1 天节流（2026-09-28 上报的正是这些设备）。
+        // normalize 同时将所有历史间隔迁移为固定 6 小时，丢弃旧通知字段。
         ...currentState,
-        ...applyLegacyIntervalMigration(normalizeUpdateSettings(persistedState, currentState)),
+        ...normalizeUpdateSettings(persistedState, currentState),
       }),
     }
   )

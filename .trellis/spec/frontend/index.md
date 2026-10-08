@@ -23,7 +23,7 @@ This directory contains guidelines for frontend development. Fill in each file w
 | [Native Course Import](./native-course-import.md) | Capacitor/WebView bridge, payload validation, and fallback contract | Implemented |
 | [Android Home-Screen Widget](./android-home-widget.md) | Widget snapshot bridge, five-tier refresh ladder, and the guarantee/staleness contract | Implemented |
 | [Mobile Schedule Layout](./mobile-schedule-layout.md) | 手机端课表契约：整周 7 天自适应铺满、1x~2x 只改列宽的信息分级、节次时间推导规则与自动化测试挂钩 | Implemented |
-| [App Update Check](./app-update.md) | 更新检测契约：Release 版本解析与 URL 白名单、通道判定与**一次性播种的持久性**、**调度记账（成功才消耗间隔窗口 + 失败冷却 + 存量间隔提升）**、release 正文的 token → React 元素渲染与降级表、通知与权限边界、调试注入验收法 | Implemented |
+| [App Update Check](./app-update.md) | 更新检测契约：Release 版本解析与 URL 白名单、通道判定与**一次性播种的持久性**、**调度记账（成功才消耗间隔窗口 + 失败冷却 + 存量间隔迁移）**、release 正文的 token → React 元素渲染与降级表、仅前台弹窗与固定 6 小时间隔、调试注入验收法 | Implemented |
 
 ---
 

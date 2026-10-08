@@ -81,7 +81,9 @@ export function CourseImportShell({
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
               <CardTitle>应用内导入课程表</CardTitle>
-              <CardDescription>在受限的天津理工大学教务页面内完成登录和课表导入。</CardDescription>
+              <CardDescription className="text-base leading-7 sm:text-sm sm:leading-6">
+                在受限的天津理工大学教务页面内完成登录和课表导入。
+              </CardDescription>
             </div>
             <Badge variant={content.variant}>{content.label}</Badge>
           </div>
@@ -90,40 +92,49 @@ export function CourseImportShell({
           {!isActive && (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor={`${variant}-native-term`}>学年学期代码</Label>
+                <Label htmlFor={`${variant}-native-term`} className="text-base sm:text-sm">
+                  学年学期代码
+                </Label>
                 <Input
                   id={`${variant}-native-term`}
                   value={term}
                   placeholder="例如 2025-2026-2"
                   onChange={(event) => onTermChange(event.target.value)}
+                  className="min-h-11 text-base sm:min-h-9 sm:text-sm"
                 />
-                <p className="text-sm text-muted-foreground">该代码只用于课表页面未主动请求时的同源补抓请求。</p>
+                <p className="text-base leading-7 text-muted-foreground sm:text-sm sm:leading-6">
+                  该代码只用于课表页面未主动请求时的同源补抓请求。
+                </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor={`${variant}-native-first-week-start-date`}>第一周第一天</Label>
+                <Label htmlFor={`${variant}-native-first-week-start-date`} className="text-base sm:text-sm">
+                  第一周第一天
+                </Label>
                 <FirstWeekStartDatePicker
                   value={firstWeekStartDate}
                   onChange={onFirstWeekStartDateChange}
                   placeholder="请选择第一周第一天"
                   showIcon={false}
-                  className="w-full"
+                  className="min-h-11 w-full text-base sm:min-h-9 sm:text-sm"
                 />
-                <p className="text-sm text-muted-foreground">用于按导入时刻自动标记已上课程，请选择本学期第一周的周一。</p>
+                <p className="text-base leading-7 text-muted-foreground sm:text-sm sm:leading-6">
+                  用于按导入时刻自动标记已上课程，请选择本学期第一周的周一。
+                </p>
               </div>
             </div>
           )}
 
           {!compactNative && (
             <>
-              <div className="rounded-md border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
-                <ol className="list-decimal space-y-1 pl-5">
+              <div className="rounded-md border bg-muted/30 p-4 text-base leading-7 text-muted-foreground sm:text-sm sm:leading-6">
+                <ol className="list-decimal space-y-2 pl-5 sm:space-y-1">
                   {importDescriptionSteps.map((step) => (
                     <li key={step}>{step}</li>
                   ))}
                 </ol>
               </div>
 
-              <div className="flex items-start gap-2 rounded-md border p-3 text-sm text-muted-foreground">
+              <div className="flex items-start gap-2 rounded-md border p-3 text-base leading-7 text-muted-foreground sm:text-sm sm:leading-6">
                 <ShieldCheck className="mt-0.5 size-4 shrink-0" />
                 <span>登录始终发生在天津理工大学教务系统页面内，原始响应只在本次导入期间传递，不会写入备份或浏览器存储。</span>
               </div>
@@ -145,28 +156,28 @@ export function CourseImportShell({
               )}
               <div className="min-w-0 space-y-1">
                 <p className="font-medium">{content.title}</p>
-                <p className="text-sm text-muted-foreground">{error || content.description}</p>
+                <p className="text-base leading-7 text-muted-foreground sm:text-sm sm:leading-6">{error || content.description}</p>
               </div>
             </CardContent>
           </Card>
 
           {isNative && (
             <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="outline" onClick={onBack}>
+              <Button variant="outline" className="min-h-11 sm:min-h-9" onClick={onBack}>
                 <ArrowLeft />
                 返回
               </Button>
               {status !== 'failed' && (
-                <Button variant="outline" onClick={onRefresh} disabled={!isActive || !canRefresh}>
+                <Button variant="outline" className="min-h-11 sm:min-h-9" onClick={onRefresh} disabled={!isActive || !canRefresh}>
                   <RefreshCw />
                   刷新
                 </Button>
               )}
-              <Button onClick={onPrimary} disabled={status === 'handing-off' || status === 'opening'}>
+              <Button className="min-h-11 sm:min-h-9" onClick={onPrimary} disabled={status === 'handing-off' || status === 'opening'}>
                 {status === 'captured' ? '导入当前课表' : status === 'ready' ? '请求导入' : status === 'failed' ? '重试' : '打开教务系统'}
               </Button>
               {onCancel && (
-                <Button variant="ghost" onClick={onCancel}>
+                <Button variant="ghost" className="min-h-11 sm:min-h-9" onClick={onCancel}>
                   取消
                 </Button>
               )}

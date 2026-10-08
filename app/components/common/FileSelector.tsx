@@ -25,7 +25,7 @@ export const FileSelector = forwardRef<HTMLInputElement, FileSelectorProps>(
             }
           }}
           className={cn(
-            'flex h-10 w-full cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-left text-sm shadow-xs transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30',
+            'flex min-h-12 w-full cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-left text-base shadow-xs transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:min-h-10 sm:text-sm',
             className
           )}
         >

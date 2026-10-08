@@ -26,16 +26,16 @@ export function StepperActions({
   return (
     <>
       {onCancel && (
-        <Button variant="outline" onClick={onCancel}>
+        <Button variant="outline" className="min-h-11 flex-none px-2 sm:min-h-9 sm:flex-initial sm:px-4" onClick={onCancel}>
           {cancelLabel}
         </Button>
       )}
       {canGoBack && (
-        <Button variant="outline" onClick={onBack}>
+        <Button variant="outline" className="min-h-11 flex-none px-2 sm:min-h-9 sm:flex-initial sm:px-4" onClick={onBack}>
           {backLabel}
         </Button>
       )}
-      <Button onClick={onPrimary} disabled={primaryDisabled}>
+      <Button className="min-h-11 min-w-0 flex-1 px-2 sm:min-h-9 sm:flex-initial sm:px-4" onClick={onPrimary} disabled={primaryDisabled}>
         {primaryLabel}
       </Button>
     </>

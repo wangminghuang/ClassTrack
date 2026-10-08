@@ -1,8 +1,10 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import type { PersistOptions } from 'zustand/middleware'
+import type { CoursePaletteId } from '~/lib/types'
 
 type ScheduleDisplayStore = {
+  coursePalette: CoursePaletteId
   showAttendanceStatus: boolean
   showOutOfWeekCourses: boolean
   /**
@@ -17,16 +19,17 @@ type ScheduleDisplayStore = {
    * 默认开启：它是「滑到边缘」才有反应的补强手势，不占用任何既有交互，关掉只是少一个翻周方式。
    */
   edgeSwipeWeekSwitch: boolean
+  setCoursePalette: (value: CoursePaletteId) => void
   setShowAttendanceStatus: (value: boolean) => void
   setShowOutOfWeekCourses: (value: boolean) => void
   setCollapseEmptyWeekdayColumns: (value: boolean) => void
   setEdgeSwipeWeekSwitch: (value: boolean) => void
 }
 
-/** 真正落盘的字段：只有显示开关，没有 setter。 */
+/** 真正落盘的字段：显示偏好，不包含 setter。 */
 type ScheduleDisplayPersisted = Pick<
   ScheduleDisplayStore,
-  'showAttendanceStatus' | 'showOutOfWeekCourses' | 'collapseEmptyWeekdayColumns' | 'edgeSwipeWeekSwitch'
+  'coursePalette' | 'showAttendanceStatus' | 'showOutOfWeekCourses' | 'collapseEmptyWeekdayColumns' | 'edgeSwipeWeekSwitch'
 >
 
 /**
@@ -41,6 +44,7 @@ export const scheduleDisplayPersistOptions: PersistOptions<ScheduleDisplayStore,
   name: 'class-track-schedule-display',
   storage: createJSONStorage(() => localStorage),
   partialize: (state) => ({
+    coursePalette: state.coursePalette,
     showAttendanceStatus: state.showAttendanceStatus,
     showOutOfWeekCourses: state.showOutOfWeekCourses,
     collapseEmptyWeekdayColumns: state.collapseEmptyWeekdayColumns,
@@ -52,6 +56,10 @@ export const scheduleDisplayPersistOptions: PersistOptions<ScheduleDisplayStore,
     // 缺失字段会以 undefined 覆盖掉默认值（`false` 是合法值，不能与「缺失」混为一谈）。
     return {
       ...currentState,
+      coursePalette:
+        persisted?.coursePalette === 'original' || persisted?.coursePalette === 'adjusted'
+          ? persisted.coursePalette
+          : currentState.coursePalette,
       showAttendanceStatus: persisted?.showAttendanceStatus ?? currentState.showAttendanceStatus,
       showOutOfWeekCourses: persisted?.showOutOfWeekCourses ?? currentState.showOutOfWeekCourses,
       collapseEmptyWeekdayColumns: persisted?.collapseEmptyWeekdayColumns ?? currentState.collapseEmptyWeekdayColumns,
@@ -63,10 +71,12 @@ export const scheduleDisplayPersistOptions: PersistOptions<ScheduleDisplayStore,
 export const useScheduleDisplayStore = create<ScheduleDisplayStore>()(
   persist(
     (set) => ({
+      coursePalette: 'original',
       showAttendanceStatus: true,
       showOutOfWeekCourses: false,
       collapseEmptyWeekdayColumns: false,
       edgeSwipeWeekSwitch: true,
+      setCoursePalette: (value) => set({ coursePalette: value }),
       setShowAttendanceStatus: (value) => set({ showAttendanceStatus: value }),
       setShowOutOfWeekCourses: (value) => set({ showOutOfWeekCourses: value }),
       setCollapseEmptyWeekdayColumns: (value) => set({ collapseEmptyWeekdayColumns: value }),

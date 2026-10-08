@@ -49,8 +49,18 @@
 - 色值采用上表中的目标 8 色与同序淡化色；分配逻辑采用 `718812f` 已有的顺序分配。
 - `buildCourseColorMap(classes: Class[]): Map<string, number>` 接收整学期课程（由 `SchedulePage` 构建），按 `courseId` 去重、`localeCompare` 排序，以 `index % 8` 分配档位。不要用当周过滤后的课程重新分配。
 - 同一整学期数据中，同一课程跨周、跨节次和刷新后颜色相同；输入重排和同课重复记录不影响结果。8 门以内不同课程颜色不同，第 9 门起循环复用；增删课程可能改变排序后的档位，这是历史行为。
-- `resolveCourseTheme(courseId, colorMap, isOutOfWeek)` 对本周和非本周使用同一档位，后者取对应淡化色；未收录的课程沿用历史档位 0 兜底。
+- `resolveCourseTheme(courseId, colorMap, isOutOfWeek, paletteId = 'original')` 对本周和非本周使用同一档位，后者取所选色板的对应淡化色；未收录的课程沿用历史档位 0 兜底。
 - **不要把恢复目标色板等同于恢复更早的哈希算法**：`51f08a8` 曾将顺序分配误换成哈希取模，课程号 `1001` / `1009` 仅两门课就都落到档位 0。回归点在 `courseColor.test.ts`，覆盖这对课程的本周/非本周重色、八门不同课程、重复与乱序数据、第九门循环和兜底行为。
+
+### 个人中心配色选择（2026-10-08）
+
+1. **范围**：个人中心 → 课表显示 → 课程配色，提供原配色与用户确认的新配色。两套均有八色课程样卡与非本周淡化色预览，预览和正式课表都读取 `courseColor.ts` 的 `COURSE_PALETTES`，不得分别写一套色值。
+2. **签名**：共享 `CoursePaletteId = 'original' | 'adjusted'`；`setCoursePalette(value: CoursePaletteId)`；`resolveCourseTheme(courseId, colorMap, isOutOfWeek, paletteId)`。`ScheduleTable` 订阅显示 store 的 `coursePalette` 并传入主题解析，切换后立即渲染。
+3. **契约**：默认 `original`（用户明确要求），设备 key 为 `class-track-schedule-display`，`partialize` 含 `coursePalette`。新配色仅将档位 2 的 `#84aef7` 改为草绿 `#a7cc8a`、档位 5 的 `#e7a0b3` 改为紫粉 `#e9a8d2`；对应淡化色为 `#bbc7b1` / `#e3d0dc`（沿用 HSL 亮度 +0.067、饱和 ×0.42），其余六档主色与淡化色原样保留。两套色板共用课程到档位的映射。
+4. **校验**：存储值为 `original` / `adjusted` 时恢复用户选择；缺失、null、数字或未知字符串回落当前默认值，避免索引不存在的色板。此偏好不进入课程备份或多学期数据。
+5. **案例**：好——选择新配色，刷新后仍选中新配色，非本周课程也取其同序淡化色；基础——全新或旧设备缺字段时使用原配色；坏——持久化未知色板标识时崩溃，或切换色板时重算课程档位。
+6. **验证**：`courseColor.test.ts` 断言仅两档主色和淡化色改变、两套均八色独立、切换不改映射；`scheduleDisplayStore.test.ts` 验证默认、保存/合并恢复与非法值回落；`ScheduleDisplaySettings.test.ts` 断言两套选择及完整预览。浏览器检查手机布局、真实切换、刷新恢复和课表应用。
+7. **错误与正确**：错误——复制临时预览的 CSS 覆盖到正式页面，或在切换时清空课程/出勤数据；正确——共享色板，通过独立显示 store 选择主题。用户确认后已移除临时 `palette-preview` 页面。
 
 ---
 

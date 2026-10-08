@@ -10,7 +10,7 @@ import {
   CELL_BADGE_CLASS,
   CELL_FALLBACK_SCALES,
   CELL_FONT_CLASS,
-  CELL_SOFT_RING_CLASS,
+  CELL_RING_CLASS,
 } from './cellScale'
 import type { CourseColorTheme } from './courseColor'
 import { getWeekParityLabel } from './utils'
@@ -18,7 +18,7 @@ import { getWeekParityLabel } from './utils'
 type ScheduleCourseCellProps = {
   course: Class
   mark: ClassMark | undefined
-  /** 这门课的配色主题（浅底 + 深字），由上层按 `courseId` 稳定解析后传入。 */
+  /** 这门课的目标配色主题，由上层按 `courseId` 稳定解析后传入。 */
   theme: CourseColorTheme
   /**
    * 「出勤统计」是否开启（个人中心的开关）。
@@ -186,8 +186,8 @@ export default function ScheduleCourseCell({ course, mark, theme, attendanceEnab
         'group relative flex h-full min-h-0 w-full cursor-pointer flex-col overflow-hidden text-left focus-visible:z-10 focus-visible:outline-none',
         // 尺度全部由课程格容器的尺寸推导（见 cellScale.ts）：内边距、圆角、描边都不再是固定 px。
         '[padding:var(--cc-pad-y)_var(--cc-pad-x)] [border-radius:var(--cc-radius)]',
-        // 描边：已上=绿、缺勤=红，其余=细灰（见 cellScale.ts）。
-        showAbsentRing ? CELL_ABSENT_RING_CLASS : showAttendedRing ? CELL_ATTENDED_RING_CLASS : CELL_SOFT_RING_CLASS,
+        // 描边：已上=绿、缺勤=红，其余恢复半透明白（见 cellScale.ts）。
+        showAbsentRing ? CELL_ABSENT_RING_CLASS : showAttendedRing ? CELL_ATTENDED_RING_CLASS : CELL_RING_CLASS,
         theme.surface
       )}
       onClick={onClick}
@@ -199,29 +199,29 @@ export default function ScheduleCourseCell({ course, mark, theme, attendanceEnab
           已确认的已知限制（极端格子允许纵向裁剪）一致。 */}
       <span ref={contentRef} className="flex min-h-0 flex-1 flex-col items-center justify-start md:items-start">
         <span ref={blockRef} className="block text-left">
-          <span ref={nameRef} data-course-name className={cn('block break-words font-semibold', theme.title, CELL_FONT_CLASS.name)}>
+          <span ref={nameRef} data-course-name className={cn('block break-words font-semibold text-white', CELL_FONT_CLASS.name)}>
             {course.name}
           </span>
           {parityLabel && (
             // 自然态即在手机端可见（不再是 `hidden` + JS 打开）：可见性完全交给 CSS 断点，
             // JS 只负责空间不够时把它关掉，判据里因此不再需要视口布尔值。
-            <span ref={parityRef} data-course-parity className={cn('block opacity-80 md:hidden', theme.body, CELL_FONT_CLASS.room)}>
+            <span ref={parityRef} data-course-parity className={cn('block text-white/70 md:hidden', CELL_FONT_CLASS.room)}>
               {parityLabel}
             </span>
           )}
           {course.classroom && (
-            <span ref={roomRef} data-course-room className={cn('mt-0.5 block break-words', theme.body, CELL_FONT_CLASS.room)}>
+            <span ref={roomRef} data-course-room className={cn('mt-0.5 block break-words text-white/85', CELL_FONT_CLASS.room)}>
               {course.classroom}
             </span>
           )}
           {course.teacher && (
-            <span ref={teacherRef} data-course-teacher className={cn('hidden break-all opacity-90', theme.body, CELL_FONT_CLASS.room)}>
+            <span ref={teacherRef} data-course-teacher className={cn('hidden break-all text-white/80', CELL_FONT_CLASS.room)}>
               {course.teacher}
             </span>
           )}
-          <span ref={noteRef} data-course-note className={cn('hidden break-all opacity-80 md:truncate', theme.body, CELL_FONT_CLASS.room)}>
+          <span ref={noteRef} data-course-note className={cn('hidden break-all text-white/70 md:truncate', CELL_FONT_CLASS.room)}>
             {note || (
-              <span className={cn('hidden opacity-70 transition-opacity md:inline md:opacity-0 md:group-hover:opacity-70', theme.body)}>
+              <span className="hidden text-white/60 transition-opacity md:inline md:opacity-0 md:group-hover:opacity-100">
                 点击查看详情
               </span>
             )}

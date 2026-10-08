@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 25
-- **Last Active**: 2026-09-29
+- **Total Sessions**: 28
+- **Last Active**: 2026-10-08
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~914 | Active |
+| `journal-1.md` | ~936 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 28 | 2026-10-08 | 回退课程顺序配色并修复颜色碰撞 | `abee4b0` | `fix/schedule-color-allocation` |
 | 25 | 2026-09-29 | 课表左右边缘阻尼滑动切换上下周（可选开关，默认开） | `0b877f5` | `feat/schedule-edge-swipe-week-switch` |
 | 24 | 2026-09-28 | 更新检测：回前台检查改为成功才记账 + 更新说明按 markdown 渲染 | `3191fb9`, `6104fa3`, `12be62b`, `d3689a7`, `e40790b` | `master` |
 | 23 | 2026-09-28 | 小工具「今天已无课」档重做（列明天课表 + 「下次上课」块）并修掉快照丢弃当天已上完课 | `4adc1b4`, `5f176f8` | `fix/widget-today-done-show-tomorrow` |

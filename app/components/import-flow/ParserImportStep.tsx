@@ -27,7 +27,9 @@ export function ParserImportStep({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="file">课程表 JSON 文件</Label>
+        <Label htmlFor="file" className="text-base sm:text-sm">
+          课程表 JSON 文件
+        </Label>
         <FileSelector
           ref={inputRef}
           id="file"
@@ -39,9 +41,11 @@ export function ParserImportStep({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="parser">解析器</Label>
+        <Label htmlFor="parser" className="text-base sm:text-sm">
+          解析器
+        </Label>
         <Select value={selectedParserId || ''} onValueChange={onParserChange}>
-          <SelectTrigger id="parser">
+          <SelectTrigger id="parser" className="min-h-11 w-full text-base sm:min-h-8 sm:text-sm">
             <SelectValue placeholder="请选择解析器" />
           </SelectTrigger>
           <SelectContent>
@@ -53,19 +57,26 @@ export function ParserImportStep({
           </SelectContent>
         </Select>
         {selectedParserId && (
-          <p className="text-sm text-muted-foreground">{parsers.find((parser) => parser.id === selectedParserId)?.description}</p>
+          <p className="text-base leading-7 text-muted-foreground sm:text-sm sm:leading-6">
+            {parsers.find((parser) => parser.id === selectedParserId)?.description}
+          </p>
         )}
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="first-week-start-date">第一周第一天</Label>
+        <Label htmlFor="first-week-start-date" className="text-base sm:text-sm">
+          第一周第一天
+        </Label>
         <FirstWeekStartDatePicker
           value={firstWeekStartDate}
           onChange={onFirstWeekStartDateChange}
           placeholder="请选择第一周第一天"
           showIcon={false}
+          className="min-h-11 w-full text-base sm:min-h-9 sm:text-sm"
         />
-        <p className="text-sm text-muted-foreground">用于按导入时刻自动标记已上课程，请选择本学期第一周的周一。</p>
+        <p className="text-base leading-7 text-muted-foreground sm:text-sm sm:leading-6">
+          用于按导入时刻自动标记已上课程，请选择本学期第一周的周一。
+        </p>
       </div>
     </div>
   )

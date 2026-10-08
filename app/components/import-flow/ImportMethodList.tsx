@@ -43,7 +43,7 @@ type ImportMethodListProps = {
  */
 export function ImportMethodList({ policy, selectedMethod, onSelect }: ImportMethodListProps) {
   return (
-    <div className="grid gap-2" data-method-count={policy.methods.length}>
+    <div className="grid gap-3 sm:gap-2" data-method-count={policy.methods.length}>
       {policy.methods.map((method) => {
         const card = IMPORT_METHOD_CARDS[method]
 
@@ -61,7 +61,10 @@ export function ImportMethodList({ policy, selectedMethod, onSelect }: ImportMet
 
       {policy.noticeCode ? (
         // 文案自带换行（两句话分两行），因此必须 whitespace-pre-line。
-        <p role="status" className="rounded-md border bg-muted/30 p-3 text-sm leading-6 whitespace-pre-line text-muted-foreground">
+        <p
+          role="status"
+          className="rounded-md border bg-muted/30 p-4 text-base leading-7 whitespace-pre-line text-muted-foreground sm:p-3 sm:text-sm sm:leading-6"
+        >
           {IMPORT_METHOD_NOTICE[policy.noticeCode]}
         </p>
       ) : null}

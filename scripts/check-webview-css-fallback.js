@@ -88,6 +88,39 @@ function readBlock(css, headerPattern) {
 }
 
 /**
+ * 找到**真正承担 `html, body` 高度升级**的那个 `@supports (height: 100dvh)` 块。
+ *
+ * 不能只取第一个命中：Tailwind 会为 `supports-[height:100dvh]:h-dvh` 这类工具类生成同名的
+ * `@supports (height:100dvh)` 块，它在产物里的相对位置会随样式表增长而改变（合并 master 后
+ * 那个工具类块就排到了 `html/body` 升级块之前）。只看第一个命中会把升级块误判成缺失，
+ * 于是守卫在产物完全正常时变红。
+ *
+ * @param {string} css 样式文本。
+ * @returns {{ start: number, end: number, body: string, rules: Array<{ index: number, body: string }> } | null}
+ */
+function findDvhUpgradeBlock(css) {
+  let cursor = 0
+
+  while (cursor < css.length) {
+    const match = new RegExp(DVH_SUPPORTS_HEADER.source).exec(css.slice(cursor))
+    if (!match) return null
+
+    const start = cursor + match.index
+    const block = readBlockAt(css, start + match[0].length - 1)
+    if (!block) return null
+
+    const rules = scanRuleBodies(block.body)
+    if (rules.some((rule) => HAS_DVH_DECLARATION.test(rule.body))) {
+      return { start, end: block.end, body: block.body, rules }
+    }
+
+    cursor = block.end
+  }
+
+  return null
+}
+
+/**
  * 扫描选择器（空白归一化后）等于 `selector` 的规则，返回每个规则的选择器起点与规则体。
  * 压缩与未压缩写法都能命中，且会一并返回嵌套在 `@supports` / `@media` 里的同名规则。
  *
@@ -146,8 +179,8 @@ function normalizeSelector(value) {
  * @returns {{ hasFallback: boolean, hasDvhUpgrade: boolean, hasDvh: boolean, fallbackBeforeUpgrade: boolean, hasShellFallback: boolean }}
  */
 export function findViewportHeightAnchor(css) {
-  const upgrade = readBlock(css, DVH_SUPPORTS_HEADER)
-  const upgradeRules = upgrade ? scanRuleBodies(upgrade.body) : []
+  const upgrade = findDvhUpgradeBlock(css)
+  const upgradeRules = upgrade ? upgrade.rules : []
 
   // 兜底必须在升级块之外：只把兜底写进 @supports 等于「只对支持 dvh 的引擎生效」，救不了旧引擎。
   // 用等长空白抹掉升级块（而不是拼接切片），这样规则下标仍与原文本一一对应，顺序判定才准。

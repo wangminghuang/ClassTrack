@@ -31,6 +31,36 @@ test('接受「块外 height:100% 兜底 + @supports 升级」的真产物形态
   assert.doesNotThrow(() => assertViewportHeightAnchor(PASSING_CSS, 'fixture'))
 })
 
+test('忽略工具类生成的同名 @supports 块：它可能排在 html/body 升级块之前', () => {
+  // Tailwind 为 `supports-[height:100dvh]:h-dvh` 会生成一个同名 `@supports (height:100dvh)` 块，
+  // 它在产物里的位置会随样式表增长而改变。守卫必须按「块里有没有 html,body 的 dvh 升级」来认，
+  // 不能只认第一个命中 —— 合并 master 后真实产物就是这种形态，旧写法在这里会误报。
+  const utilityBlockFirst =
+    '@supports (height:100dvh){.util-h-dvh{height:100dvh}}' +
+    'html,body{height:100%}' +
+    '@supports (height:100dvh){html,body{height:100dvh}}' +
+    '@supports not (height:100dvh){.app-viewport{height:100vh}}'
+
+  assert.deepEqual(findViewportHeightAnchor(utilityBlockFirst), {
+    hasFallback: true,
+    hasDvhUpgrade: true,
+    hasDvh: true,
+    fallbackBeforeUpgrade: true,
+    hasShellFallback: true,
+  })
+  assert.doesNotThrow(() => assertViewportHeightAnchor(utilityBlockFirst, 'fixture'))
+})
+
+test('工具类同名块不能冒充升级块：只有它时仍要报错', () => {
+  const utilityBlockOnly =
+    '@supports (height:100dvh){.util-h-dvh{height:100dvh}}' +
+    'html,body{height:100%}' +
+    '@supports not (height:100dvh){.app-viewport{height:100vh}}'
+
+  assert.equal(findViewportHeightAnchor(utilityBlockOnly).hasDvhUpgrade, false)
+  assert.throws(() => assertViewportHeightAnchor(utilityBlockOnly, 'fixture'), /升级块/)
+})
+
 test('拦住外壳锚点缺失（html/body 失效时无人兜底）', () => {
   const noShell = 'html,body{height:100%}@supports (height:100dvh){html,body{height:100dvh}}'
   assert.equal(findViewportHeightAnchor(noShell).hasShellFallback, false)

@@ -40,11 +40,66 @@ function fetchThrowing() {
 }
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
 })
 
 describe('GitHub Release 读取', () => {
+  it('悬挂的请求 15 秒超时，不永久锁住检查状态', async () => {
+    vi.useFakeTimers()
+    const fetchImpl: typeof fetch = async (_url, options) =>
+      new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+      })
+    const checking = fetchReleaseCandidates({ fetchImpl })
+    await vi.advanceTimersByTimeAsync(15_000)
+    await expect(checking).resolves.toEqual({ ok: false, reason: 'network' })
+  })
+
+  it('响应头到了但响应体悬挂时也能超时，并清理定时器', async () => {
+    vi.useFakeTimers()
+    const fetchImpl: typeof fetch = async (_url, options) =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            options?.signal?.addEventListener('abort', () => controller.error(new Error('aborted')), { once: true })
+          },
+        }),
+        { status: 200 }
+      )
+    const checking = fetchReleaseCandidates({ fetchImpl })
+    await vi.advanceTimersByTimeAsync(15_000)
+    await expect(checking).resolves.toEqual({ ok: false, reason: 'network' })
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('调用方主动取消时传递信号，并清理超时', async () => {
+    vi.useFakeTimers()
+    const controller = new AbortController()
+    const fetchImpl: typeof fetch = async (_url, options) =>
+      new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+      })
+    const checking = fetchReleaseCandidates({ fetchImpl, signal: controller.signal })
+    controller.abort()
+    await expect(checking).resolves.toEqual({ ok: false, reason: 'network' })
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('仓库迁移后的真实发布链接仍可解析，不能被过滤成空列表', async () => {
+    const result = await fetchReleaseCandidates({
+      fetchImpl: fetchJson([
+        rawRelease({
+          tag_name: 'android-beta-27',
+          name: 'ClassTrack Android 1.0.27-beta',
+          html_url: 'https://github.com/wangminghuang/ClassTrack/releases/tag/android-beta-27',
+        }),
+      ]),
+    })
+    expect(result).toEqual({ ok: true, candidates: [expect.objectContaining({ version: '1.0.27-beta' })] })
+  })
+
   it('成功时返回收窄后的候选列表', async () => {
     const fetchImpl = fetchJson([rawRelease()])
 

@@ -6,7 +6,7 @@
 
 ## Overview
 
-项目使用 Zustand 5、`immer` middleware、`persist` middleware 和 `createJSONStorage(() => localStorage)`。业务数据由 `app/store/index.ts` 导出的 `useClassStore` 持有（key `class-track-storage`）；**设备相关的偏好各有一个独立 store**：`app/store/mobileNavigationStore.ts`（key `class-track-mobile-navigation`，底部导航顺序）、`app/store/updateStore.ts`（key `class-track-update`，更新检测设置）、`app/store/attendanceStore.ts`（key `class-track-attendance`，出勤统计开关）、`app/store/scheduleDisplayStore.ts`（key `class-track-schedule-display`，课表显示开关：`showAttendanceStatus` / `showOutOfWeekCourses` / `collapseEmptyWeekdayColumns` / `edgeSwipeWeekSwitch`，新增字段必须同步初始值、`partialize`、`merge` 三处）。独立 store 的共同理由是：它们不该跟着备份 JSON 迁移到新设备，也不该牵动业务数据的 schema 版本与迁移逻辑。
+项目使用 Zustand 5、`immer` middleware、`persist` middleware 和 `createJSONStorage(() => localStorage)`。业务数据由 `app/store/index.ts` 导出的 `useClassStore` 持有（key `class-track-storage`）；**设备相关的偏好各有一个独立 store**：`app/store/mobileNavigationStore.ts`（key `class-track-mobile-navigation`，底部导航顺序）、`app/store/updateStore.ts`（key `class-track-update`，更新检测设置）、`app/store/attendanceStore.ts`（key `class-track-attendance`，出勤统计开关）、`app/store/scheduleDisplayStore.ts`（key `class-track-schedule-display`，课表显示偏好：`showAttendanceStatus` / `showOutOfWeekCourses` / `collapseEmptyWeekdayColumns` / `edgeSwipeWeekSwitch`，以及 `coursePalette: 'original' | 'adjusted'`，新增字段必须同步初始值、`partialize`、`merge` 三处）。独立 store 的共同理由是：它们不该跟着备份 JSON 迁移到新设备，也不该牵动业务数据的 schema 版本与迁移逻辑。
 
 slice 组合遵循现有类型和初始化方式：
 
@@ -70,6 +70,7 @@ const { school, classes, classMarks, currentWeek } = useClassStore()
 - 出勤标记键契约是 `getMarkKey(classId, week)`，值为 `` `${classId}-${week}` ``，唯一来源是 `app/store/utils.ts`。`app/features/dashboard/utils.ts` 与 `app/features/schedule/ScheduleTable.tsx` 均从此处导入（2026-09 已把原先三处重复实现收敛为一处）；新增读取出勤标记的代码必须复用该函数，不要手写字符串拼接。
 - 注意 `` `${course.dayOfWeek}-${section}` `` 是课表网格坐标，与出勤标记键无关，不要与 `getMarkKey` 混用。
 - 新增持久字段却不改 `partialize`、迁移和空数据，会导致刷新或旧版本导入丢数据。
+- 课程配色默认 `original`，旧设备存储没有 `coursePalette` 或包含非法值时回落当前默认值；显式选择 `original` / `adjusted` 必须保留。个人中心通过 `setCoursePalette()` 更新，课表订阅该字段，不为配色偏好升级业务数据 schema。配色与预览契约见 `mobile-schedule-layout.md`。
 - 不要把设备相关偏好混入业务 store；它们各有独立 key：`mobileNavigationStore`、`updateStore`、`attendanceStore`。
 - 出勤三态（已上 / 缺勤 / 未标记）的判据只有一个来源：`app/store/utils.ts` 的 `isAttendanceMarked` 与 `app/features/dashboard/utils.ts` 的 `isAttendedSession` / `isAbsentSession` / `isUnmarkedSession`。**不要再写 `session.mark && !session.mark.isAttended`** —— 那句话会把「只写了备注、没做出勤判断」的课次算成缺勤（2026-09-24 修掉的老账，见 `attendanceMarked` 字段）。
 - 「出勤统计」关闭时不得清空、过滤或重写 `classMarks`：开关只控制渲染。备注（`ClassMark.note`）与代课管理都依赖同一份数据，清掉它会连带毁掉无关功能。

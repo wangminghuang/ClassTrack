@@ -36,7 +36,7 @@ export type RunUpdateCheckArgs = {
   manual: boolean
   /** 平台是否支持（仅安卓原生）。 */
   supported: boolean
-  /** 总开关；关闭时连手动检查也不联网（prd F2）。 */
+  /** 自动检查开关；关闭后手动检查仍可用。 */
   autoCheckEnabled: boolean
   interval: CheckInterval
   /** 上一次**成功**拿到结果的时间戳。 */
@@ -62,7 +62,7 @@ export type RunUpdateCheckArgs = {
 /**
  * 走完一轮更新检查。
  *
- * @returns 本轮结果；调用方据此做 UI 副作用（toast / 模态框候选 / 通知）。
+ * @returns 本轮结果；调用方据此做 UI 副作用（toast / 模态框候选）。
  */
 export async function runUpdateCheck({
   manual,
@@ -81,7 +81,7 @@ export async function runUpdateCheck({
   markChecked,
   fetchCandidates,
 }: RunUpdateCheckArgs): Promise<CheckOutcome> {
-  if (!supported || !autoCheckEnabled) return { kind: 'skipped' }
+  if (!supported || (!manual && !autoCheckEnabled)) return { kind: 'skipped' }
   if (!shouldCheckNow({ interval, lastCheckAt, lastAttemptAt, now, inFlight, manual })) return { kind: 'skipped' }
 
   // 读版本走的是原生桥（本地调用、不耗限流额度），所以放在记账之前：

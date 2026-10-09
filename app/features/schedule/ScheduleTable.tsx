@@ -7,7 +7,9 @@ import type { Class, ClassMark } from '~/lib/types'
 import { getMarkKey } from '~/store/utils'
 import { useScheduleDisplayStore } from '~/store/scheduleDisplayStore'
 import { cn } from '~/lib/utils'
+import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip'
 import { CELL_CONTAINER_CLASS, GRID_CONTAINER_CLASS, cellScaleStyle } from './cellScale'
+import { resolveCourseTheme } from './courseColor'
 import { dayNames, sections, weekDays } from './constants'
 import ScheduleCourseCell from './ScheduleCourseCell'
 import { useScheduleZoom } from './hooks/useScheduleZoom'
@@ -18,6 +20,8 @@ import type { SectionTime, VisibleCourse } from './utils'
 type ScheduleTableProps = {
   visibleCourses: VisibleCourse[]
   classMarks: Record<string, ClassMark>
+  /** 「课程号 → 配色档位」的稳定映射（见 `courseColor.ts`），保证一门课固定一色。 */
+  courseColorMap: Map<string, number>
   /** 「出勤统计」是否开启；关闭时课程格不画出勤痕迹（备注照常显示）。 */
   attendanceEnabled: boolean
   currentWeek: number
@@ -27,6 +31,10 @@ type ScheduleTableProps = {
   /** 边缘滑动 / 顶栏 / 键盘共用的翻周入口。 */
   onWeekChange: (week: number) => void
   onCourseClick: (course: Class) => void
+  /** 点击空白格子：用于在该时段补一节课（补课）。 */
+  onEmptyCellClick: (dayOfWeek: number, section: number) => void
+  /** 点击列头（周几）：用于把某天的课整天补到这一天。 */
+  onDayHeaderClick: (dayOfWeek: number) => void
 }
 
 /** 「收起整周无课的日期列」时，无课列的轨道：`1.75rem` 是最小列宽保护，保证「周六 + 10.03」仍放得下。 */
@@ -36,6 +44,7 @@ const BUSY_DAY_TRACK = 'minmax(0, 1fr)'
 export default function ScheduleTable({
   visibleCourses,
   classMarks,
+  courseColorMap,
   attendanceEnabled,
   currentWeek,
   firstWeekStartDate,
@@ -43,12 +52,15 @@ export default function ScheduleTable({
   maxWeek,
   onWeekChange,
   onCourseClick,
+  onEmptyCellClick,
+  onDayHeaderClick,
 }: ScheduleTableProps) {
   const isMobile = useIsMobile()
   const { zoom, detailLevel, scrollRef, gridRef, containerProps, zoomIn, zoomOut, canZoomIn, canZoomOut } = useScheduleZoom()
 
   const collapseEmptyWeekdayColumns = useScheduleDisplayStore((state) => state.collapseEmptyWeekdayColumns)
   const edgeSwipeWeekSwitch = useScheduleDisplayStore((state) => state.edgeSwipeWeekSwitch)
+  const coursePalette = useScheduleDisplayStore((state) => state.coursePalette)
 
   // 手机端课表的横向边缘阻尼手势。桌面端不启用（鼠标拖拽不在需求内），
   // 开关关闭时连监听器都不挂，横滑完全回到改动前的行为。
@@ -128,19 +140,28 @@ export default function ScheduleTable({
             {weekDays.map((day) => {
               const date = getDayDate(firstWeekStartDate, currentWeek, day)
               return (
-                <div
-                  key={day}
-                  data-day-head
-                  className={cn(
-                    'flex flex-col items-center justify-center border-b border-border bg-muted/60 font-medium text-muted-foreground md:flex-row',
-                    day !== 7 && 'border-r'
-                  )}
-                >
-                  <span className="[font-size:var(--cc-head)] [line-height:1.2]">{dayNames[day]}</span>
-                  {date && (
-                    <span className="font-normal [font-size:var(--cc-head-sub)] [line-height:1.2] md:ml-1.5">{format(date, 'MM.dd')}</span>
-                  )}
-                </div>
+                <Tooltip key={day}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      data-day-head
+                      aria-label={`${dayNames[day]} 快捷操作`}
+                      onClick={() => onDayHeaderClick(day)}
+                      className={cn(
+                        'flex cursor-pointer flex-col items-center justify-center border-b border-border bg-muted/60 font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring/40 md:flex-row',
+                        day !== 7 && 'border-r'
+                      )}
+                    >
+                      <span className="[font-size:var(--cc-head)] [line-height:1.2]">{dayNames[day]}</span>
+                      {date && (
+                        <span className="font-normal [font-size:var(--cc-head-sub)] [line-height:1.2] md:ml-1.5">
+                          {format(date, 'MM.dd')}
+                        </span>
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">快捷操作</TooltipContent>
+                </Tooltip>
               )
             })}
 
@@ -176,11 +197,21 @@ export default function ScheduleTable({
                 if (occupiedCells.has(`${day}-${section}`)) return null
 
                 return (
-                  <div
+                  <button
                     key={`empty-${day}-${section}`}
-                    className={cn(day !== 7 && 'border-r', section !== 12 && 'border-b', 'border-border')}
+                    type="button"
+                    aria-label={`${dayNames[day]} 第 ${section} 节 补课`}
+                    onClick={() => onEmptyCellClick(day, section)}
+                    className={cn(
+                      'group/empty flex items-center justify-center text-muted-foreground/60 outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring/40',
+                      day !== 7 && 'border-r',
+                      section !== 12 && 'border-b',
+                      'border-border'
+                    )}
                     style={{ gridColumn: day + 1, gridRow: section + 1 }}
-                  />
+                  >
+                    <Plus className="size-3.5 opacity-0 transition-opacity group-hover/empty:opacity-70 group-focus-visible/empty:opacity-70" />
+                  </button>
                 )
               })
             )}
@@ -209,6 +240,7 @@ export default function ScheduleTable({
                   <ScheduleCourseCell
                     course={course}
                     mark={getClassMark(course.id, currentWeek)}
+                    theme={resolveCourseTheme(course.courseId, courseColorMap, isOutOfWeek, coursePalette)}
                     attendanceEnabled={attendanceEnabled}
                     isOutOfWeek={isOutOfWeek}
                     onClick={() => onCourseClick(course)}

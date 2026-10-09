@@ -11,11 +11,13 @@ type BackupImportStepProps = {
 export function BackupImportStep({ inputRef, fileName, onChange }: BackupImportStepProps) {
   return (
     <div className="space-y-4">
-      <div className="rounded-md border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
+      <div className="rounded-md border bg-muted/30 p-4 text-base leading-7 text-muted-foreground sm:text-sm sm:leading-6">
         请选择从数据管理页面导出的 ClassTrack 备份 JSON 文件。导入成功后会恢复学校、课程、考勤标记和当前周次等数据。
       </div>
       <div className="space-y-2">
-        <Label htmlFor="backup-file">备份 JSON 文件</Label>
+        <Label htmlFor="backup-file" className="text-base sm:text-sm">
+          备份 JSON 文件
+        </Label>
         <FileSelector
           ref={inputRef}
           id="backup-file"

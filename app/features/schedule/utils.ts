@@ -1,41 +1,6 @@
 import { addDays } from 'date-fns'
 import type { Class } from '~/lib/types'
-import {
-  DETAIL_FULL_THRESHOLD,
-  DETAIL_STANDARD_THRESHOLD,
-  ZOOM_MAX,
-  ZOOM_MIN,
-  ZOOM_TIERS,
-  courseColors,
-  courseOutOfWeekColors,
-} from './constants'
-
-/**
- * 根据课程 ID 为课程分配一个稳定的课表颜色。
- *
- * 课表中同一门课需要在不同周次、不同页面刷新后保持相同颜色，因此这里
- * 使用课程 ID 计算简单哈希，再映射到预设调色板。只要课程 ID 不变，
- * 返回的颜色就不会变化。
- *
- * @param courseId 课程的稳定标识，通常来自解析后的课程号或教学班信息。
- * @returns `courseColors` 中的一个颜色配置。
- */
-function courseHash(courseId: string) {
-  let hash = 0
-  for (let index = 0; index < courseId.length; index++) {
-    hash = courseId.charCodeAt(index) + ((hash << 5) - hash)
-  }
-  return Math.abs(hash)
-}
-
-export function getCourseColor(courseId: string) {
-  return courseColors[courseHash(courseId) % courseColors.length]
-}
-
-/** 非本周淡化色：与 `getCourseColor` 走同一哈希档位，返回同序的淡化色。 */
-export function getCourseOutOfWeekColor(courseId: string) {
-  return courseOutOfWeekColors[courseHash(courseId) % courseOutOfWeekColors.length]
-}
+import { DETAIL_FULL_THRESHOLD, DETAIL_STANDARD_THRESHOLD, ZOOM_MAX, ZOOM_MIN, ZOOM_TIERS } from './constants'
 
 /**
  * 计算指定教学周和星期对应的自然日期。

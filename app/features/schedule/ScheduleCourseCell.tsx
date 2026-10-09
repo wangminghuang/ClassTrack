@@ -4,12 +4,22 @@ import type { Class, ClassMark } from '~/lib/types'
 import { cn } from '~/lib/utils'
 import { useScheduleDisplayStore } from '~/store/scheduleDisplayStore'
 import { isAttendanceMarked } from '~/store/utils'
-import { CELL_ABSENT_RING_CLASS, CELL_BADGE_CLASS, CELL_FALLBACK_SCALES, CELL_FONT_CLASS, CELL_RING_CLASS } from './cellScale'
-import { getCourseColor, getCourseOutOfWeekColor, getWeekParityLabel } from './utils'
+import {
+  CELL_ABSENT_RING_CLASS,
+  CELL_ATTENDED_RING_CLASS,
+  CELL_BADGE_CLASS,
+  CELL_FALLBACK_SCALES,
+  CELL_FONT_CLASS,
+  CELL_RING_CLASS,
+} from './cellScale'
+import type { CourseColorTheme } from './courseColor'
+import { getWeekParityLabel } from './utils'
 
 type ScheduleCourseCellProps = {
   course: Class
   mark: ClassMark | undefined
+  /** 这门课的目标配色主题，由上层按 `courseId` 稳定解析后传入。 */
+  theme: CourseColorTheme
   /**
    * 「出勤统计」是否开启（个人中心的开关）。
    *
@@ -22,7 +32,7 @@ type ScheduleCourseCellProps = {
   onClick: () => void
 }
 
-export default function ScheduleCourseCell({ course, mark, attendanceEnabled, isOutOfWeek, onClick }: ScheduleCourseCellProps) {
+export default function ScheduleCourseCell({ course, mark, theme, attendanceEnabled, isOutOfWeek, onClick }: ScheduleCourseCellProps) {
   const showAttendanceStatus = useScheduleDisplayStore((state) => state.showAttendanceStatus)
   /**
    * 这一格是否**做过出勤判断** —— 判据只用 `isAttendanceMarked()`（`app/store/utils.ts`）：
@@ -35,8 +45,6 @@ export default function ScheduleCourseCell({ course, mark, attendanceEnabled, is
   const isAbsent = attendanceMarked && !isAttended
   const note = mark?.note || ''
   const parityLabel = isOutOfWeek ? '非本周' : getWeekParityLabel(course.weeks)
-  const courseColor = getCourseColor(course.courseId)
-  const courseOutOfWeekColor = getCourseOutOfWeekColor(course.courseId)
   // 出勤痕迹要同时满足「出勤统计已开启」与「用户在课表显示里没关掉它」，且只针对本周课：
   // 非本周课一般没有当周标记，灰色态优先，不再叠加任何出勤痕迹。
   const showAttendance = attendanceEnabled && showAttendanceStatus && !isOutOfWeek
@@ -47,8 +55,9 @@ export default function ScheduleCourseCell({ course, mark, attendanceEnabled, is
    * 「还没标记」不等于「缺勤」，课表不该替用户下这个结论。
    */
   const showAttendanceMarks = showAttendance && attendanceMarked
-  /** 缺勤红描边：受同样的两层开关与「非本周优先」约束（非本周走灰色态，不叠出勤痕迹）。 */
+  /** 缺勤红描边 / 已上绿描边：受同样的两层开关与「非本周优先」约束（非本周走灰色态，不叠出勤痕迹）。 */
   const showAbsentRing = showAttendance && isAbsent
+  const showAttendedRing = showAttendance && isAttended
 
   const buttonRef = useRef<HTMLButtonElement>(null)
   const contentRef = useRef<HTMLSpanElement>(null)
@@ -123,8 +132,8 @@ export default function ScheduleCourseCell({ course, mark, attendanceEnabled, is
         button.style.setProperty('--cc-scale', String(scale))
       }
 
-      // 文字块在卡片里居中、块内文字仍左对齐：把内层块收窄到「实际用到的最大行宽」，
-      // 再由外层 `items-center` 居中。逐行 `text-center` 会把每行都居中，长课名反而更难读。
+      // 内层块收窄到「实际用到的最大行宽」：手机端由外层 `items-center` 居中，桌面端
+      // （`md:items-start`）靠左对齐。逐行 `text-center` 会把每行都居中、长课名更难读，所以统一走块内左对齐。
       if (!block) return
       let used = 0
       for (const el of [parity, name, room, teacher, note]) {
@@ -177,9 +186,9 @@ export default function ScheduleCourseCell({ course, mark, attendanceEnabled, is
         'group relative flex h-full min-h-0 w-full cursor-pointer flex-col overflow-hidden text-left focus-visible:z-10 focus-visible:outline-none',
         // 尺度全部由课程格容器的尺寸推导（见 cellScale.ts）：内边距、圆角、描边都不再是固定 px。
         '[padding:var(--cc-pad-y)_var(--cc-pad-x)] [border-radius:var(--cc-radius)]',
-        // 描边：常态半透明白；缺勤换成实色红（宽度共用同一个 `--cc-ring`，不为缺勤另起尺度）。
-        showAbsentRing ? CELL_ABSENT_RING_CLASS : CELL_RING_CLASS,
-        isOutOfWeek ? courseOutOfWeekColor : courseColor
+        // 描边：已上=绿、缺勤=红，其余恢复半透明白（见 cellScale.ts）。
+        showAbsentRing ? CELL_ABSENT_RING_CLASS : showAttendedRing ? CELL_ATTENDED_RING_CLASS : CELL_RING_CLASS,
+        theme.surface
       )}
       onClick={onClick}
       title={`${course.name}${showAttendanceMarks ? `，${isAttended ? '已上' : '未上'}` : ''}${isOutOfWeek ? '，非本周' : ''}，点击查看详情`}
@@ -188,7 +197,7 @@ export default function ScheduleCourseCell({ course, mark, attendanceEnabled, is
           否则短内容浮在卡片中间、长内容贴着顶部，同一屏里每格的起始高度都不一样。
           溢出时内容向下溢出并被 `overflow-hidden` 裁掉，顶部始终可见 —— 这正好与 PRD 里
           已确认的已知限制（极端格子允许纵向裁剪）一致。 */}
-      <span ref={contentRef} className="flex min-h-0 flex-1 flex-col items-center justify-start">
+      <span ref={contentRef} className="flex min-h-0 flex-1 flex-col items-center justify-start md:items-start">
         <span ref={blockRef} className="block text-left">
           <span ref={nameRef} data-course-name className={cn('block break-words font-semibold text-white', CELL_FONT_CLASS.name)}>
             {course.name}
@@ -220,7 +229,7 @@ export default function ScheduleCourseCell({ course, mark, attendanceEnabled, is
         </span>
       </span>
       {showAttendanceMarks && (
-        <span className="absolute bottom-1 right-1 text-white/90">
+        <span className={cn('absolute bottom-1 right-1', isAttended ? 'text-emerald-600' : 'text-rose-600')}>
           {isAttended ? <CheckCircle2 className={CELL_BADGE_CLASS} /> : <CircleAlert className={CELL_BADGE_CLASS} />}
         </span>
       )}

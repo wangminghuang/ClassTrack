@@ -33,11 +33,19 @@ export function BookmarkletInstallStep({ adapter, term, bookmarkletHref, onTermC
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="term">学年学期代码</Label>
+        <Label htmlFor="term" className="text-base sm:text-sm">
+          学年学期代码
+        </Label>
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Input id="term" value={term} placeholder={adapter.defaultTerm} onChange={(event) => onTermChange(event.target.value)} />
+              <Input
+                id="term"
+                value={term}
+                placeholder={adapter.defaultTerm}
+                onChange={(event) => onTermChange(event.target.value)}
+                className="min-h-11 text-base sm:min-h-9 sm:text-sm"
+              />
             </TooltipTrigger>
             <TooltipContent side="top">
               已按当前日期自动填入，如不正确请手动修改。该参数会写入书签脚本，修改后需要重新拖拽安装或复制脚本。

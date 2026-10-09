@@ -25,7 +25,7 @@ export const UPDATE_CHANNEL_HINTS: Record<UpdateChannel, string> = {
 }
 
 /** 「去下载」唯一允许打开的地址前缀（prd T6）。 */
-export const RELEASE_URL_PREFIX = 'https://github.com/Love-wmh/ClassTrack/releases/'
+export const RELEASE_URL_PREFIX = 'https://github.com/wangminghuang/ClassTrack/releases/'
 
 /** release 标题里携带版本号，如 `ClassTrack Android 1.0.10-beta`。 */
 const TITLE_VERSION_PATTERN = /ClassTrack\s+Android\s+(\S+)/
@@ -56,7 +56,8 @@ function readString(value: unknown): string {
 
 /** 「去下载」的地址白名单校验：必须是本仓库的 release 页面（prd T6）。 */
 export function isAllowedReleaseUrl(url: string): boolean {
-  return url.startsWith(RELEASE_URL_PREFIX)
+  // 旧发布链接仍会重定向到同一仓库；兼容已有记录，不能放宽到任意 GitHub 仓库。
+  return [RELEASE_URL_PREFIX, 'https://github.com/Love-wmh/ClassTrack/releases/'].some((prefix) => url.startsWith(prefix))
 }
 
 /**

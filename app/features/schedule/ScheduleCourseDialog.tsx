@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCircle2, CircleAlert, Clock3, MapPin, UserRound } from 'lucide-react'
+import { CheckCircle2, CircleAlert, Clock3, MapPin, Trash2, UserRound } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/dialog'
 import { Textarea } from '~/components/ui/textarea'
@@ -19,6 +19,8 @@ type ScheduleCourseDialogProps = {
   onOpenChange: (open: boolean) => void
   onToggleAttendance: (classId: string, week: number) => void
   onSaveNote: (classId: string, week: number, note: string) => void
+  /** 删除这节课；仅对手动补课（`course.isManual`）展示删除入口。 */
+  onDelete?: (classId: string) => void
 }
 
 export default function ScheduleCourseDialog({
@@ -30,12 +32,14 @@ export default function ScheduleCourseDialog({
   onOpenChange,
   onToggleAttendance,
   onSaveNote,
+  onDelete,
 }: ScheduleCourseDialogProps) {
   const [note, setNote] = useState(mark?.note || '')
 
   if (!course) return null
 
   const isAttended = Boolean(mark?.isAttended)
+  const canDelete = Boolean(course.isManual && onDelete)
   const handleSave = () => {
     onSaveNote(course.id, currentWeek, note.trim())
     onOpenChange(false)
@@ -51,6 +55,7 @@ export default function ScheduleCourseDialog({
             {course.startSection === course.endSection
               ? `第 ${course.startSection} 节`
               : `第 ${course.startSection}-${course.endSection} 节`}
+            {course.isManual && ' · 补课'}
           </DialogDescription>
         </DialogHeader>
 
@@ -103,6 +108,21 @@ export default function ScheduleCourseDialog({
             className="min-h-32 resize-y"
           />
         </div>
+
+        {canDelete && (
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 justify-start border-destructive/40 text-destructive hover:bg-destructive/5 hover:text-destructive md:min-h-9"
+            onClick={() => {
+              onDelete?.(course.id)
+              onOpenChange(false)
+            }}
+          >
+            <Trash2 />
+            删除这节补课
+          </Button>
+        )}
 
         <DialogFooter className="grid grid-cols-2 gap-2 md:flex">
           <Button type="button" variant="outline" className="min-h-11 md:min-h-9" onClick={() => onOpenChange(false)}>

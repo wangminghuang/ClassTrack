@@ -29,9 +29,11 @@ export function ImportSchoolStep({
   return (
     <div className="space-y-5">
       <div className="space-y-2">
-        <Label htmlFor="school">学校</Label>
+        <Label htmlFor="school" className="text-base sm:text-sm">
+          学校
+        </Label>
         <Select value={selectedSchool?.id} onValueChange={handleSchoolChange}>
-          <SelectTrigger id="school" className="w-full">
+          <SelectTrigger id="school" className="min-h-11 w-full text-base sm:min-h-8 sm:text-sm">
             <SelectValue placeholder="请选择学校" />
           </SelectTrigger>
           <SelectContent>
@@ -45,7 +47,7 @@ export function ImportSchoolStep({
       </div>
 
       <div className="space-y-2">
-        <Label>导入方式</Label>
+        <Label className="text-base sm:text-sm">导入方式</Label>
         <ImportMethodList policy={importMethodPolicy} selectedMethod={selectedImportMethod} onSelect={onImportMethodChange} />
       </div>
     </div>

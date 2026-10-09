@@ -32,4 +32,19 @@ describe('课表显示设置：左右边缘滑动切换周', () => {
     expect(html).toContain('id="schedule-display-out-of-week"')
     expect(html).toContain('id="schedule-display-collapse-empty-days"')
   })
+
+  it('个人中心同时提供原配色与新配色，两套都带八色课程及非本周预览', () => {
+    const html = render()
+
+    expect(html).toContain('aria-label="原配色"')
+    expect(html).toContain('aria-label="新配色"')
+    for (const palette of ['original', 'adjusted']) {
+      expect(html.match(new RegExp(`data-palette-sample="${palette}"`, 'g'))).toHaveLength(8)
+      expect(html.match(new RegExp(`data-palette-muted-sample="${palette}"`, 'g'))).toHaveLength(8)
+    }
+    expect(html).toContain('bg-[#84aef7]')
+    expect(html).toContain('bg-[#e7a0b3]')
+    expect(html).toContain('bg-[#a7cc8a]')
+    expect(html).toContain('bg-[#e9a8d2]')
+  })
 })

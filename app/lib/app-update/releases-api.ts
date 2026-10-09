@@ -10,10 +10,10 @@ import type { UpdateCandidate } from './channels'
  * 2. **一次请求拿两条轨道**。列表按创建时间倒序，正式版与测试版都在里面，
  *    按通道分两次请求只会白花一半的限流额度。
  *
- * 仓库是公开的，因此不带 token（prd 边界）：匿名限流 60 次/小时，默认一天一次。
+ * 仓库是公开的，因此不带 token（prd 边界）：匿名限流 60 次/小时，前台每 6 小时检查一次。
  */
 
-export const CLASSTRACK_RELEASES_URL = 'https://api.github.com/repos/Love-wmh/ClassTrack/releases?per_page=20'
+export const CLASSTRACK_RELEASES_URL = 'https://api.github.com/repos/wangminghuang/ClassTrack/releases?per_page=20'
 
 /** 假数据的 localStorage 键（仅在 `VITE_UPDATE_DEBUG=1` 构建里会被读取）。 */
 export const UPDATE_DEBUG_STORAGE_KEY = 'class-track-update-debug'
@@ -100,32 +100,43 @@ export async function fetchReleaseCandidates(options: FetchReleasesOptions = {})
     if (injected) return { ok: true, candidates: injected }
   }
 
-  const doFetch = fetchImpl ?? globalThis.fetch
-
-  let response: Response
+  const controller = new AbortController()
+  const abort = () => controller.abort()
+  if (signal?.aborted) abort()
+  signal?.addEventListener('abort', abort, { once: true })
+  // 断网或连接悬挂不能永久锁住「检查中」；超时仍按网络失败处理。
+  const timeout = setTimeout(abort, 15_000)
   try {
-    response = await doFetch(CLASSTRACK_RELEASES_URL, {
-      signal,
-      headers: { Accept: 'application/vnd.github+json' },
-    })
-  } catch {
-    return { ok: false, reason: 'network' }
-  }
+    const doFetch = fetchImpl ?? globalThis.fetch
 
-  if (response.status === 403 || response.status === 429) return { ok: false, reason: 'rate-limited' }
-  if (!response.ok) return { ok: false, reason: response.status >= 500 ? 'network' : 'invalid' }
+    let response: Response
+    try {
+      response = await doFetch(CLASSTRACK_RELEASES_URL, {
+        signal: controller.signal,
+        headers: { Accept: 'application/vnd.github+json' },
+      })
+    } catch {
+      return { ok: false, reason: 'network' }
+    }
 
-  let payload: unknown
-  try {
-    payload = await response.json()
-  } catch {
-    return { ok: false, reason: 'invalid' }
-  }
+    if (response.status === 403 || response.status === 429) return { ok: false, reason: 'rate-limited' }
+    if (!response.ok) return { ok: false, reason: response.status >= 500 ? 'network' : 'invalid' }
 
-  if (!Array.isArray(payload)) return { ok: false, reason: 'invalid' }
+    let payload: unknown
+    try {
+      payload = await response.json()
+    } catch {
+      return { ok: false, reason: controller.signal.aborted ? 'network' : 'invalid' }
+    }
 
-  return {
-    ok: true,
-    candidates: payload.map(toUpdateCandidate).filter((candidate): candidate is UpdateCandidate => candidate !== null),
+    if (!Array.isArray(payload)) return { ok: false, reason: 'invalid' }
+
+    return {
+      ok: true,
+      candidates: payload.map(toUpdateCandidate).filter((candidate): candidate is UpdateCandidate => candidate !== null),
+    }
+  } finally {
+    clearTimeout(timeout)
+    signal?.removeEventListener('abort', abort)
   }
 }

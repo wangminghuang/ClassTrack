@@ -158,19 +158,39 @@ export const CELL_RING_CLASS =
   '[box-shadow:inset_0_0_0_var(--cc-ring)_rgb(255_255_255_/_0.55)] focus-visible:[box-shadow:inset_0_0_0_var(--cc-ring)_rgb(255_255_255_/_0.55),0_0_0_2px_var(--ring)]'
 
 /**
- * 卡片描边（缺勤）：**实色红**内描边，宽度与常态白描边共用同一个 `--cc-ring`。
+ * 卡片描边（浅色主题常态）：极细的半透明深灰内描边，给浅底卡片一条清晰边缘。
+ *
+ * 新版课程格改用「浅底 + 深字」，旧的半透明**白**内描边在浅底上几乎不可见，于是改用半透明
+ * **深灰** `rgb(15 23 42 / 0.08)` 的内描边；宽度仍共用 `--cc-ring`（随容器走），缺勤仍走
+ * `CELL_ABSENT_RING_CLASS`（实色红），聚焦态补一圈 `--ring`。**必须是字面量**（Tailwind 只扫源码里的类名）。
+ */
+export const CELL_SOFT_RING_CLASS =
+  '[box-shadow:inset_0_0_0_var(--cc-ring)_rgb(15_23_42_/_0.08)] focus-visible:[box-shadow:inset_0_0_0_var(--cc-ring)_rgb(15_23_42_/_0.08),0_0_0_2px_var(--ring)]'
+
+/**
+ * 卡片描边（已上）：**柔和半透明绿**内描边，宽度与常态描边共用同一个 `--cc-ring`。
+ *
+ * 复刻历史提交 `247437d` 的轮廓观感：当时用的是 `ring-1 ring-inset ring-emerald-300/70`——
+ * 浅绿 + 70% 透明的细描边，比后来那版实色饱和绿耐看得多。这里取 emerald-300
+ * （`#6ee7b7` = `rgb(110 231 183)`）配 0.7 透明度；缺勤对应 `CELL_ABSENT_RING_CLASS`（柔和玫红）。
+ * **这一串必须是字面量**（Tailwind 只扫描源码里出现的类名）。
+ */
+export const CELL_ATTENDED_RING_CLASS =
+  '[box-shadow:inset_0_0_0_var(--cc-ring)_rgb(110_231_183_/_0.7)] focus-visible:[box-shadow:inset_0_0_0_var(--cc-ring)_rgb(110_231_183_/_0.7),0_0_0_2px_var(--ring)]'
+
+/**
+ * 卡片描边（缺勤）：**柔和半透明玫红**内描边，宽度与常态描边共用同一个 `--cc-ring`。
  *
  * 为什么缺勤不用「整卡变淡」：`opacity-60 saturate-50` 与非本周课程的淡化色观感雷同——同一张
- * 课表上「缺勤」与「这周没这节课」几乎分不出来（用户原话：「跟单双周但是这周没有这节课的显示效果一致」），
- * 而且整卡发灰既不明显也不好看。缺勤需要的是**边缘信号**：卡片底色照旧，只把描边换成不透明红——
- * 一眼可辨，且与非本周在**形状**上就不同（缺勤改边、非本周换面色）。
+ * 课表上「缺勤」与「这周没这节课」几乎分不出来，而且整卡发灰既不明显也不好看。缺勤走**边缘信号**：
+ * 卡片底色照旧，只把描边换色——与非本周（换面色）在形状上就不同。
  *
- * 红色取 `#ef4444`（= `rgb(239 68 68)`），与看板「缺勤」系列 `ABSENT_FILL` 同色。
- * 任意值里的 `_` 是 Tailwind 的空格写法；**这一串必须是字面量**，运行时拼出来的类名不会被
- * Tailwind 扫描生成（与 `CELL_RING_CLASS` / `CELL_FONT_CLASS` 同一条约定）。
+ * 复刻历史提交 `247437d` 的轮廓观感：当时用的是 `ring-1 ring-inset ring-rose-300/70`。
+ * 这里取 rose-300（`#fda4af` = `rgb(253 164 175)`）配 0.7 透明度，与已上绿 emerald-300/70 成对，
+ * 比之前的实色饱和红柔和耐看。**这一串必须是字面量**，运行时拼出来的类名不会被 Tailwind 扫描生成。
  */
 export const CELL_ABSENT_RING_CLASS =
-  '[box-shadow:inset_0_0_0_var(--cc-ring)_rgb(239_68_68)] focus-visible:[box-shadow:inset_0_0_0_var(--cc-ring)_rgb(239_68_68),0_0_0_2px_var(--ring)]'
+  '[box-shadow:inset_0_0_0_var(--cc-ring)_rgb(253_164_175_/_0.7)] focus-visible:[box-shadow:inset_0_0_0_var(--cc-ring)_rgb(253_164_175_/_0.7),0_0_0_2px_var(--ring)]'
 
 /** 出勤角标尺寸；角标只出现在**做过出勤判断**的格子上（见 `ScheduleCourseCell.tsx`）。 */
 export const CELL_BADGE_CLASS = '[width:var(--cc-badge)] [height:var(--cc-badge)]'

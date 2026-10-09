@@ -934,6 +934,16 @@ Android 12 上课表滑不动的真因不是手势层，而是 app.css 的 heigh
 - package.json / ci.yml：新增 webview:check-css 与 test:webview-css，挂 cap:build:android 链尾与 CI 的 pnpm build 之后
 - research/：等价条件器械 cdp-dvh-equivalent、加固矩阵 preventive-hardening-probe、设备诊断 device-diagnostics、写法矩阵 lightningcss-fallback-matrix 等
 - spec：quality-guidelines.md 新增「构建产物的兼容性契约（视口高度锚点）」与「外壳锚点：不得单点依赖 html/body」；mobile-schedule-layout.md 补前置依赖与器械清单
+## Session 28: 回退课程顺序配色并修复颜色碰撞
+<!-- trellis-session: v=2 fp=74aa90bf87ae35de -->
+
+**Date**: 2026-10-08
+**Task**: 回退课程顺序配色并修复颜色碰撞
+**Branch**: `fix/schedule-color-allocation`
+
+### Summary
+
+恢复 718812f 已有的课程号去重排序、顺序分配与档位 0 兜底，修正恢复目标色板时误引入的哈希碰撞；保持目标色板与对应淡化色。新增 5 项回归用例，全量 41 个文件、393 项测试及 typecheck、lint、format:check、build 通过。历史映射差分一致。修复任务已归档，PR #29：https://github.com/wangminghuang/ClassTrack/pull/29。
 
 ### Git Commits
 
@@ -949,6 +959,40 @@ Android 12 上课表滑不动的真因不是手势层，而是 app.css 的 heigh
 - [OK] [OK] AC-7 C2：正常引擎 412×915/1440×900 基线逐项不变；把 html/body 高度全拿掉后 maxScrollTop 0 → 48、课程格与字号全回基线；产物含 @supports not 块
 - [OK] [OK] AC-8 诊断器械四种状态判定：ok / layout-anchor / needs-no-scroll / touch-layer 全部正确
 - [OK] [OK] AC-1/AC-4 反证：还原旧写法后单测 3/4 红、产物只剩 height:100dvh、pnpm webview:check-css 退出码 1
+| `abee4b0` | fix(schedule): 恢复课程顺序配色避免重色 |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 29: 课程配色选择与前台更新检查
+<!-- trellis-session: v=2 fp=195afa88385f8dbb -->
+
+**Date**: 2026-10-08
+**Task**: 课程配色选择与前台更新检查
+**Branch**: `feat/course-palette-and-update-check`
+
+### Summary
+
+保留新旧课程配色，个人中心可选择及预览，默认原配色；修复仓库迁移后发布链接被旧白名单过滤的问题，自动更新固定前台每6小时检查，仅弹模态框，不发通知。
+
+### Main Changes
+
+- 新色板仅调整两档及其淡化色，选择持久化，历史课程分配规则保持。
+- 更新API及发布页白名单同步仓库新地址；旧设备间隔统一6小时，移除通知和权限调用，支持关闭自动检查后手动检查，增加15秒超时。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `41edcfc` | feat(schedule): 支持新旧课程配色选择与预览 |
+| `ccb24fb` | fix(update): 修复发布地址并改为前台每六小时检查 |
+
+### Testing
+
+- [OK] 401项测试通过，typecheck、lint、format:check、build与git diff --check通过。
+- [OK] 重放20条真实GitHub发布数据，识别1.0.27-beta；浏览器模拟验证后台结果不弹框、回前台提示、6小时调度、手动检查及无通知插件调用。
 
 ### Status
 
@@ -959,3 +1003,4 @@ Android 12 上课表滑不动的真因不是手势层，而是 app.css 的 heigh
 - 真机验收（AC-6，用户口径未做）：装含本次修复的 APK 到报问题的 Android 12 设备确认课表可上下滑；已把这条路由写进 09-29-schedule-edge-swipe-device-verify 的 PRD
 - 若设备实测仍滑不动：先跑 research/device-diagnostics.mjs 定位到层（锚点/布局层 / 触摸事件层 / 本来无需滚），再决定改哪里
 - PR #26 待审；合并后观察 CI 的 webview:check-css 与 test:webview-css 两条新检查
+- Android原生生命周期尚需真机验收。

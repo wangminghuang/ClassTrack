@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import type { Class, ClassMark } from '~/lib/types'
 import ScheduleCourseCell from './ScheduleCourseCell'
-import { CELL_ABSENT_RING_CLASS, CELL_RING_CLASS } from './cellScale'
+import { CELL_ABSENT_RING_CLASS, CELL_ATTENDED_RING_CLASS, CELL_SOFT_RING_CLASS } from './cellScale'
+import { COURSE_COLOR_THEMES } from './courseColor'
 
 type ScheduleCourseCellProps = Parameters<typeof ScheduleCourseCell>[0]
 
@@ -34,6 +35,7 @@ function render(overrides: Partial<ScheduleCourseCellProps> = {}) {
     createElement(ScheduleCourseCell, {
       course,
       mark: attendedMark,
+      theme: COURSE_COLOR_THEMES[0],
       attendanceEnabled: true,
       isOutOfWeek: false,
       onClick: () => {},
@@ -42,8 +44,10 @@ function render(overrides: Partial<ScheduleCourseCellProps> = {}) {
   )
 }
 
-/** 缺勤红描边里的实色红（`#ef4444`）——出现它就说明这一格用的是 `CELL_ABSENT_RING_CLASS`。 */
-const ABSENT_RING_COLOR = 'rgb(239_68_68)'
+/** 缺勤玫红描边里的颜色（`#fda4af` = `rgb(253 164 175)`，rose-300）——出现它就说明用的是 `CELL_ABSENT_RING_CLASS`。 */
+const ABSENT_RING_COLOR = 'rgb(253_164_175'
+/** 已上绿描边里的颜色（`#6ee7b7` = `rgb(110 231 183)`，emerald-300）。 */
+const ATTENDED_RING_COLOR = 'rgb(110_231_183'
 /** 已上打勾 / 缺勤警示两个 lucide 图标的类名。 */
 const CHECK_ICON = 'lucide-circle-check'
 const ALERT_ICON = 'lucide-circle-alert'
@@ -54,10 +58,11 @@ function badgeCount(html: string) {
   return html.match(/\[width:var\(--cc-badge\)\]/g)?.length ?? 0
 }
 
-/** 断言这一格**没有任何**出勤痕迹：不变淡、无红描边、无角标、文案不提已上 / 未上。 */
+/** 断言这一格**没有任何**出勤痕迹：不变淡、无红/绿描边、无角标、文案不提已上 / 未上。 */
 function expectNoAttendanceTrace(html: string) {
   for (const cls of DIM_CLASSES) expect(html).not.toContain(cls)
   expect(html).not.toContain(ABSENT_RING_COLOR)
+  expect(html).not.toContain(ATTENDED_RING_COLOR)
   expect(html).not.toContain(CHECK_ICON)
   expect(html).not.toContain(ALERT_ICON)
   expect(badgeCount(html)).toBe(0)
@@ -71,19 +76,21 @@ describe('课程格的出勤外观', () => {
 
     for (const cls of DIM_CLASSES) expect(html).not.toContain(cls)
     expect(html).toContain(CELL_ABSENT_RING_CLASS)
-    expect(html).not.toContain(CELL_RING_CLASS)
+    expect(html).not.toContain(CELL_ATTENDED_RING_CLASS)
+    expect(html).not.toContain(CELL_SOFT_RING_CLASS)
     expect(html).toContain(ALERT_ICON)
     expect(html).not.toContain(CHECK_ICON)
     expect(badgeCount(html)).toBe(1)
     expect(html).toContain('未上')
   })
 
-  it('已上：保留打勾角标，不变淡也不加红描边', () => {
+  it('已上：改为实色绿描边，保留打勾角标，不变淡也不加红描边', () => {
     const html = render({ mark: attendedMark, attendanceEnabled: true })
 
     for (const cls of DIM_CLASSES) expect(html).not.toContain(cls)
-    expect(html).toContain(CELL_RING_CLASS)
+    expect(html).toContain(CELL_ATTENDED_RING_CLASS)
     expect(html).not.toContain(CELL_ABSENT_RING_CLASS)
+    expect(html).not.toContain(CELL_SOFT_RING_CLASS)
     expect(html).toContain(CHECK_ICON)
     expect(badgeCount(html)).toBe(1)
     expect(html).toContain('已上')
@@ -110,7 +117,7 @@ describe('课程格的出勤外观', () => {
     expect(render({ mark: notedMark, attendanceEnabled: false })).toContain('带实验报告')
   })
 
-  it('非本周课走灰色淡化，不叠加出勤痕迹（即使标记为未上）', () => {
+  it('非本周课使用课程对应的淡化色，不叠加出勤痕迹（即使标记为未上）', () => {
     const html = render({ mark: absentMark, attendanceEnabled: true, isOutOfWeek: true })
 
     expect(html).toContain('data-course-out-of-week')

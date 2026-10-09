@@ -80,6 +80,12 @@ export default function ScheduleCourseCell({ course, mark, onClick }: ScheduleCo
 
 这段模式来自 `app/features/schedule/ScheduleTable.tsx`。图标使用 `lucide-react`，导航中可见类似 `<item.icon className="h-5 w-5" />` 的写法。`app/components/ui/button.tsx` 等 shadcn 文件允许直接改动，优先调整 `className` 或 `cva` variants，而不是整体替换生成文件。
 
+### 手机多步骤对话框
+
+手机上的多步骤流程若包含较长说明，应让 Dialog 在窄屏占满视口，把标题和操作栏留在滚动区之外，只滚动中间内容；左右、上下留白要考虑 `safe-area-inset-*`。动态视口高度以 `100vh` 为基础，并用 Tailwind `supports-[height:100dvh]` 变体覆盖，保留旧 WebView 可用的高度兜底。到 `sm` 断点再恢复居中 Dialog。
+
+不要把桌面完整步骤条压缩到手机宽度。手机显示当前步骤名称、步数和简短进度条，桌面继续显示完整步骤条；正文至少用 `text-base leading-7`，触控按钮至少高 44px，再在 `sm` 断点恢复桌面字号和尺寸。当前实现见 `app/components/dialog/ImportDialog.tsx`、`app/components/stepper/Stepper.tsx` 和 `app/components/stepper/StepperActions.tsx`。
+
 ---
 
 ## Accessibility

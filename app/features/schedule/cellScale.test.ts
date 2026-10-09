@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   CELL_ABSENT_RING_CLASS,
+  CELL_ATTENDED_RING_CLASS,
   CELL_FALLBACK_SCALES,
   CELL_FONT_CLASS,
   CELL_LINE_HEIGHT,
@@ -176,25 +177,28 @@ describe('尺度变量是容器单位，不是硬编码 px', () => {
 })
 
 describe('卡片描边常量', () => {
-  it('常态半透明白、缺勤实色红，且两种描边的宽度共用同一个 --cc-ring', () => {
-    for (const cls of [CELL_RING_CLASS, CELL_ABSENT_RING_CLASS]) {
+  it('常态半透明白、已上柔和绿、缺勤柔和玫红，且几种描边的宽度共用同一个 --cc-ring', () => {
+    for (const cls of [CELL_RING_CLASS, CELL_ATTENDED_RING_CLASS, CELL_ABSENT_RING_CLASS]) {
       expect(cls).toContain('inset_0_0_0_var(--cc-ring)')
-      // 缺勤不为描边另起一套尺度：宽度只能来自 --cc-ring
+      // 出勤描边不为宽度另起一套尺度：宽度只能来自 --cc-ring
       expect(cls).not.toMatch(/inset_0_0_0_\d+px/)
     }
 
     expect(CELL_RING_CLASS).toContain('rgb(255_255_255_/_0.55)')
-    // 缺勤红 = #ef4444，与看板「缺勤」系列 ABSENT_FILL 同色
-    expect(CELL_ABSENT_RING_CLASS).toContain('rgb(239_68_68)')
+    // 已上绿 = emerald-300 #6ee7b7 配 0.7 透明度（复刻提交 247437d 的 ring-emerald-300/70）
+    expect(CELL_ATTENDED_RING_CLASS).toContain('rgb(110_231_183_/_0.7)')
+    // 缺勤玫红 = rose-300 #fda4af 配 0.7 透明度（复刻提交 247437d 的 ring-rose-300/70）
+    expect(CELL_ABSENT_RING_CLASS).toContain('rgb(253_164_175_/_0.7)')
   })
 
-  it('缺勤红是不透明实色：没有 `/ 0.x` 一类的透明度修饰', () => {
-    // Tailwind 任意值里的 `_` 是空格，所以透明度形如 `_/_0.55`
-    expect(CELL_ABSENT_RING_CLASS).not.toMatch(/rgb\([^)]*_\/_/)
+  it('已上绿 / 缺勤玫红都是柔和半透明（带 `/ 0.7` 透明度修饰）', () => {
+    // Tailwind 任意值里的 `_` 是空格，所以透明度形如 `_/_0.7`
+    expect(CELL_ATTENDED_RING_CLASS).toMatch(/rgb\([^)]*_\/_0\.7\)/)
+    expect(CELL_ABSENT_RING_CLASS).toMatch(/rgb\([^)]*_\/_0\.7\)/)
   })
 
   it('键盘聚焦态仍走外圈，且不丢内描边', () => {
-    for (const cls of [CELL_RING_CLASS, CELL_ABSENT_RING_CLASS]) {
+    for (const cls of [CELL_RING_CLASS, CELL_ATTENDED_RING_CLASS, CELL_ABSENT_RING_CLASS]) {
       expect(cls).toContain('focus-visible:[box-shadow:')
       expect(cls).toContain('0_0_0_2px_var(--ring)')
     }

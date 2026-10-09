@@ -1,0 +1,29 @@
+{
+  "id": "fix-schedule-scroll-legacy-webview",
+  "name": "fix-schedule-scroll-legacy-webview",
+  "title": "修复低版本 WebView 上课表无法上下滑动（html/body 的 height 兜底被构建删除）",
+  "description": "现象：Android 12 等低版本设备上，应用内课表无法上下滑动（安卓 16 正常），且关掉「左右边缘滑动切换周」开关后仍然如此 —— 排除手势层。已确认的缺陷：app/app.css 写的 height:100%;height:100dvh 兜底在构建产物里只剩 height:100dvh（Tailwind v4 → lightningcss 按 Chrome 111+ 目标把它当冗余删掉），于是不支持 dvh 的引擎上 html/body 变成 height:auto，整条 height:100% 链失去锚点，课表滚动容器 clientHeight 涨到内容高度、maxScrollTop=0，溢出部分被 body{overflow:hidden} 裁掉且永远滚不到。需确认设备 WebView 版本并决定最低支持基线，再修兜底与降级策略。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "YeTongY",
+  "assignee": "YeTongY",
+  "createdAt": "2026-09-29",
+  "completedAt": "2026-09-29",
+  "branch": "fix/schedule-scroll-legacy-webview",
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "pr_url": "https://github.com/Love-wmh/ClassTrack/pull/26",
+    "commit": "280c1bf"
+  }
+}

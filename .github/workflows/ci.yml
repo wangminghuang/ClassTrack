@@ -28,10 +28,14 @@ jobs:
       - run: pnpm format:check
       - run: pnpm test
       - run: pnpm build
+      # 视口高度锚点守卫：只读构建产物，因此放在 build 之后；它挡的是「构建器把 html,body 的
+      # height:100% 兜底当冗余声明删掉」这类没有运行时报错的回归（旧 WebView 上课表会完全滑不动）。
+      - run: pnpm webview:check-css
       # 资产守卫的单元测试。它只测守卫自己的纯函数（不碰真产物），因此可以在这里跑；
       # `pnpm android:check-assets` 需要真 APK，只能在发布链路里跑。
       # 这条以前漏了：vitest 的 include 只收 app/**/*.test.ts，于是它哪都不跑。
       - run: pnpm test:android-assets
+      - run: pnpm test:webview-css
 
   # 提交信息规范：主题必须用中文写（规则见 commitlint.config.cjs 的内联插件）。
   # 本地由 husky 的 commit-msg hook 拦一次，这里再拦一次，`--no-verify` 因此绕不过去。

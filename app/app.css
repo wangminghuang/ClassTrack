@@ -13,11 +13,23 @@ html,
 body {
   @apply bg-background text-foreground antialiased;
   height: 100%;
-  height: 100dvh;
   overflow: hidden;
 
   @media (prefers-color-scheme: dark) {
     color-scheme: dark;
+  }
+}
+
+/* `dvh` 只在支持的引擎上覆盖成动态视口高度；不支持的引擎（Chromium ≤ 107 / Safari < 15.4）用上面那条
+   `height: 100%`。**必须**写成独立的 `@supports` 块，不能写成同一条规则里的两次 `height`：lightningcss
+   会把前一条当「被后一条覆盖的冗余声明」删掉，产物里就只剩 `dvh` —— 于是不支持 `dvh` 的 WebView 上
+   `html/body` 变成 `height: auto`，应用外壳整条 `height:100%` 链失去锚点，课表区域 scrollHeight 涨到
+   等于 clientHeight、完全无法上下滑动（且溢出部分被 `overflow: hidden` 裁掉）。
+   详见任务 09-29-fix-schedule-scroll-legacy-webview 与 quality-guidelines.md 的兼容性契约。 */
+@supports (height: 100dvh) {
+  html,
+  body {
+    height: 100dvh;
   }
 }
 
@@ -157,6 +169,19 @@ body {
     padding-top: env(safe-area-inset-top);
     padding-right: env(safe-area-inset-right);
     padding-left: env(safe-area-inset-left);
+  }
+
+  /* 应用外壳不能让高度锚点单点依赖 `html/body`：万一那层失效（例如构建器又把兜底当冗余删掉），
+     整条 `height:100%` 链都会退化成 `auto`，全站内部滚动区随之失效（课表「滑不动」就是这么来的）。
+     在不支持 `dvh` 的引擎上再给外壳一个 `100vh` 锚点：那里 `100vh` 就等于 WebView 高度，与
+     「`html/body` 正常时的 `100%`」等价；支持 `dvh` 的引擎上这个块恒不生效，因此零影响。
+     **必须**写成独立的 `@supports not` 块 —— 写进 `.app-viewport` 自身规则会被 lightningcss 当
+     「被覆盖的冗余声明」删掉（与 html/body 那条同一机制，见 quality-guidelines.md 的兼容性契约）。 */
+  @supports not (height: 100dvh) {
+    .app-viewport {
+      height: 100vh;
+      max-height: 100vh;
+    }
   }
   .no-scrollbar::-webkit-scrollbar {
     display: none;

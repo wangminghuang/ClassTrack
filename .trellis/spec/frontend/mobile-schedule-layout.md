@@ -14,6 +14,15 @@
 
 ## Layout Contract
 
+> **视口高度锚点（前置依赖）**：本页所有「铺满剩余高度 / 内部滚动」的行为都依赖 `html/body` 的高度锚点。
+> `height: 100%` 兜底必须写在 `@supports (height: 100dvh)` 块**之外**，否则不支持 `dvh` 的旧 WebView
+> （Chromium ≤ 107，Android 12 出厂 WebView 就在这条线以下）上 `html/body` 会变成 `height: auto`，
+> 课表滚动容器 `scrollHeight == clientHeight`、**完全无法上下滑动**，且溢出部分被 `body{overflow:hidden}` 裁掉。
+> 写法契约、无兜底特性清单与两条防回归检查见 `quality-guidelines.md` 的「构建产物的兼容性契约（视口高度锚点）」。
+> **双保险（2026-09-29 追加）**：应用外壳自己还有一条只在「不支持 `dvh` 的引擎」上生效的锚点
+> （`@supports not (height: 100dvh)` 里给 `.app-viewport` 设 `100vh`）—— 即使 `html/body` 那层失效，外壳仍成立。
+> 写法与实测见 `quality-guidelines.md` 的同一节。
+
 | 能力 | 手机端 (<768px) | 桌面端 (≥768px) |
 | --- | --- | --- |
 | 网格最小宽度 | `min-w-[calc(100%*var(--schedule-zoom,1))]`（1x 时恰好等于容器宽度） | 保持 `md:min-w-[760px]` |
@@ -378,6 +387,26 @@ agent-browser eval "String(document.querySelectorAll('[data-course-cell]').lengt
 - `XDG_RUNTIME_DIR` 默认指向只读的 `/run/user/1000`，先 `export XDG_RUNTIME_DIR=/tmp/ab-runtime`；**不要把它与 `pnpm dev &` 写在同一条 `&&` 链里**（整条链会被 `&` 放进子 shell，export 不生效，报 `Failed to create socket directory: Read-only file system`）。
 - dev server 不能跨 bash 调用存活（每次调用是新的 net/pid 命名空间）：起服务、灌种子、跑脚本必须在**同一次**调用内完成。
 - 断言只看 `data-*` 与 computed style：拖动中读 `inlineTransform` / `data-week-swipe-state`，松手后读 `data-current-week` 与 `inlineTransform === ''`；关掉动画残留的判据是 `computedTransform === 'none'`（不是 matrix 全零）。
+
+### 视口高度锚点的等价条件验收（2026-09-29 起）
+
+`.trellis/tasks/09-29-fix-schedule-scroll-legacy-webview/research/`：
+
+- `cdp-dvh-equivalent.mjs` —— 把页面里所有 `height: 100dvh` 声明从 CSSOM 里 `removeProperty` 掉
+  （= 旧引擎忽略该声明后的结果，不删整条规则，所以 `overflow:hidden` 等仍然生效），再读 `html/body`
+  计算高度、`[data-schedule-scroll]` 的 `maxScrollTop`，并用 CDP 真实触摸派发一次纵向拖动。
+  **这是「课表能不能上下滑」唯一的自动化判据**：兜底失效时这里会得到 `maxScrollTop = 0`、拖动后 `scrollTop` 不动。
+- `cdp-dvh-simulation.mjs` —— 更粗的对照（直接 `height:auto !important`），展示「连兜底都没有」时的后果。
+- `cdp-vertical-scroll-matrix.mjs` —— 412/360 × 7 个视口高度的纵向滚动对照组（支持 `dvh` 时本来就该正常）。
+- `lightningcss-fallback-matrix.mjs` —— 兜底写法矩阵：用仓库实际那份 lightningcss 编译候选写法，断言
+  兜底是否活到产物里；升级 Tailwind / Vite / lightningcss 之后怀疑兜底又被删时，先跑它。
+- `make-seed.mjs` —— 由归档夹具生成 `--init-script` 用的灌种子脚本（夹具里的中文与双引号经
+  `agent-browser eval "$(cat …)"` 会被 shell 吃掉转义，写不进去）。
+- `preventive-hardening-probe.mjs` —— 加固候选矩阵（基线 / 网格 `min-height` / 外壳锚点 / 锚点被人为拿掉 / 各组合），
+  每个场景都做一次真实触摸纵向拖动，用来同时验「正常引擎零影响」与「失效时可救援」。
+- `device-diagnostics.mjs` —— **设备侧一键诊断**：`--print-snippet` 打印可贴进 WebView devtools 的自包含表达式，
+  给 CDP ws url 则直接输出判定（`ok` / `needs-no-scroll` / `layout-anchor` / `scroll-disabled` / `touch-layer`）。
+  遇到「滑不动」先用它定位到层，别直接改 CSS。
 ---
 
 ## Common Mistakes

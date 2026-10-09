@@ -55,6 +55,22 @@
 - 不改手势结构、不改 `touch-action`、不改滚动/缩放行为。
 - 不重跑已由浏览器侧真实触摸覆盖的手势数学（那些已有证据）。
 
+## 前置修复（2026-09-29 新增）
+
+AC-4 里的「纵向滚动零回归」在真机上曾因**另一个原因**失败：`html/body` 的 `height: 100%` 兜底被构建器
+（Tailwind v4 → lightningcss 把「被后一条覆盖的冗余声明」删掉）删掉，产物里只剩 `height: 100dvh`；
+不支持 `dvh` 的 WebView（Chromium ≤ 107，Android 12 出厂 WebView 就在这条线以下）上 `html/body` 变成
+`height: auto`，课表滚动容器 `scrollHeight == clientHeight` —— **课表完全无法上下滑动**（与手势层无关）。
+该缺陷已由任务 `../09-29-fix-schedule-scroll-legacy-webview/` 修复（改为 `@supports (height: 100dvh)` 独立升级块）。
+
+因此本任务执行时注意两点：
+
+- 若被测设备的 WebView 是 Chromium ≤ 107，**先确认手上的 APK 含该修复**，否则 AC-4 会以「课表滑不动」失败，
+  而那不是手势层的问题；
+- AC-4 的纵向滚动一条可直接复用修复任务的器械
+  `../09-29-fix-schedule-scroll-legacy-webview/research/cdp-dvh-equivalent.mjs`
+  （把 `height:100dvh` 声明从 CSSOM 删掉即等价于旧引擎），或直接在该设备上量 `maxScrollTop`。
+
 ## 验收标准
 
 - [ ] **AC-1** F1 在 Android WebView 上复核：边缘继续同向拖时阻尼位移出现（或如实回报 F1 成立并停止）

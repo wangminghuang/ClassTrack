@@ -4,10 +4,12 @@
   "type": "module",
   "scripts": {
     "build": "react-router build",
-    "cap:build:android": "pnpm cap:sync:android && ./android/gradlew -p android assembleDebug && pnpm android:check-assets",
+    "cap:build:android": "pnpm cap:sync:android && ./android/gradlew -p android assembleDebug && pnpm android:check-assets && pnpm webview:check-css",
     "cap:install:android": "bash scripts/install-android.sh",
     "android:check-assets": "node scripts/check-android-assets.js",
     "test:android-assets": "node --test scripts/check-android-assets.test.js",
+    "webview:check-css": "node scripts/check-webview-css-fallback.js",
+    "test:webview-css": "node --test scripts/check-webview-css-fallback.test.js",
     "cap:open:android": "cap open android",
     "cap:sync:android": "pnpm build && cap sync android",
     "dev": "react-router dev",

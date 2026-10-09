@@ -914,6 +914,26 @@ PR #24 已合并（master 4bc9973）。两处独立修复：① lastCheckAt 语�
 - 真机触摸验收待补：.trellis/tasks/09-29-schedule-edge-swipe-device-verify（需有 /dev/kvm 的环境）；随后推分支开 PR 到 master
 
 
+## Session 26: 修复旧 WebView 上课表无法上下滑动（html/body 高度兜底被构建删除）+ 预防性加固
+<!-- trellis-session: v=2 fp=b41fd0bebe4cd236 -->
+
+**Date**: 2026-09-29
+**Task**: 修复旧 WebView 上课表无法上下滑动（html/body 高度兜底被构建删除）+ 预防性加固
+**Branch**: `fix/schedule-scroll-legacy-webview`
+
+### Summary
+
+Android 12 上课表滑不动的真因不是手势层，而是 app.css 的 height:100% 兜底被 lightningcss 当「被后一条覆盖的冗余声明」删掉，产物只剩 dvh；不支持 dvh 的 WebView（Chromium ≤ 107）上 html/body 变 height:auto，外壳整条高度链塌陷、课表 maxScrollTop 变 0 且溢出被 body{overflow:hidden} 裁掉。修复用独立 @supports (height: 100dvh) 块升级 + 块外兜底，并加两条防回归检查。随后按用户要求做预防性加固：C2 给 .app-viewport 再加一条只对无 dvh 引擎生效的 100vh 锚点（去单点依赖，实测可救援），D 加设备端一键诊断器械（把未知第二原因压成一次分层判定）。真机验收按用户口径未做。
+
+### Main Changes
+
+- app/app.css：html/body 高度改为「块外 height:100% 兜底 + @supports (height:100dvh) 升级块」
+- app/app.css：@layer utilities 内为 .app-viewport 新增 @supports not (height:100dvh) 的 100vh 外壳锚点（C2）
+- app/appCssViewportAnchor.test.ts（新）：源码结构契约 5 例（含外壳锚点）；扫描器边界补 { 以覆盖 @layer/@supports 内规则
+- scripts/check-webview-css-fallback.js / .test.js（新）：14 例自测的真产物断言（兜底在块外、dvh 升级块、顺序、外壳锚点）
+- package.json / ci.yml：新增 webview:check-css 与 test:webview-css，挂 cap:build:android 链尾与 CI 的 pnpm build 之后
+- research/：等价条件器械 cdp-dvh-equivalent、加固矩阵 preventive-hardening-probe、设备诊断 device-diagnostics、写法矩阵 lightningcss-fallback-matrix 等
+- spec：quality-guidelines.md 新增「构建产物的兼容性契约（视口高度锚点）」与「外壳锚点：不得单点依赖 html/body」；mobile-schedule-layout.md 补前置依赖与器械清单
 ## Session 28: 回退课程顺序配色并修复颜色碰撞
 <!-- trellis-session: v=2 fp=74aa90bf87ae35de -->
 
@@ -929,6 +949,16 @@ PR #24 已合并（master 4bc9973）。两处独立修复：① lastCheckAt 语�
 
 | Hash | Message |
 |------|---------|
+| `904111f` | fix(schedule): 补回 html/body 的 height:100% 兜底，修复旧 WebView 上课表无法上下滑动 |
+| `280c1bf` | fix(webview): 外壳再补一条高度锚点兜底，并加设备端一键诊断器械 |
+
+### Testing
+
+- [OK] [OK] pnpm typecheck / lint / format:check / build 全绿；pnpm test 41 文件 393 用例；pnpm test:webview-css 14/14；pnpm webview:check-css 通过（含外壳锚点断言）
+- [OK] [OK] AC-2/AC-3 等价旧引擎（CSSOM 删掉 dvh 声明）：maxScrollTop 0 → 48、纵向拖动 scrollTop 0 → 48、body 高度不再超视口
+- [OK] [OK] AC-7 C2：正常引擎 412×915/1440×900 基线逐项不变；把 html/body 高度全拿掉后 maxScrollTop 0 → 48、课程格与字号全回基线；产物含 @supports not 块
+- [OK] [OK] AC-8 诊断器械四种状态判定：ok / layout-anchor / needs-no-scroll / touch-layer 全部正确
+- [OK] [OK] AC-1/AC-4 反证：还原旧写法后单测 3/4 红、产物只剩 height:100dvh、pnpm webview:check-css 退出码 1
 | `abee4b0` | fix(schedule): 恢复课程顺序配色避免重色 |
 
 ### Status
@@ -970,4 +1000,7 @@ PR #24 已合并（master 4bc9973）。两处独立修复：① lastCheckAt 语�
 
 ### Next Steps
 
+- 真机验收（AC-6，用户口径未做）：装含本次修复的 APK 到报问题的 Android 12 设备确认课表可上下滑；已把这条路由写进 09-29-schedule-edge-swipe-device-verify 的 PRD
+- 若设备实测仍滑不动：先跑 research/device-diagnostics.mjs 定位到层（锚点/布局层 / 触摸事件层 / 本来无需滚），再决定改哪里
+- PR #26 待审；合并后观察 CI 的 webview:check-css 与 test:webview-css 两条新检查
 - Android原生生命周期尚需真机验收。

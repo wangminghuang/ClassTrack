@@ -1,0 +1,20 @@
+{
+  "label": "m2 双指平行竖直",
+  "before": {
+    "scrollTop": 0,
+    "scrollLeft": 0,
+    "maxTop": 279,
+    "maxLeft": 0,
+    "zoomVar": "1",
+    "swipeState": "idle"
+  },
+  "after": {
+    "scrollTop": 0,
+    "scrollLeft": 0,
+    "maxTop": 279,
+    "maxLeft": 0,
+    "zoomVar": "1",
+    "swipeState": "idle"
+  },
+  "dispatchedFrames": 17
+}

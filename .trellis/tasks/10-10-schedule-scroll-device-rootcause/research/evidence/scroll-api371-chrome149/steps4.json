@@ -1,0 +1,4 @@
+[
+  {"op":"scrollTo","top":9999,"label":"force-scroll-max"},
+  {"op":"sleep","ms":1500}
+]

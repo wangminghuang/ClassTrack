@@ -1,0 +1,20 @@
+{
+  "label": "m4 擦碰第二点后抬起继续拖",
+  "before": {
+    "scrollTop": 0,
+    "scrollLeft": 0,
+    "maxTop": 279,
+    "maxLeft": 394,
+    "zoomVar": "2",
+    "swipeState": "idle"
+  },
+  "after": {
+    "scrollTop": 0,
+    "scrollLeft": 0,
+    "maxTop": 279,
+    "maxLeft": 394,
+    "zoomVar": "2",
+    "swipeState": "idle"
+  },
+  "dispatchedFrames": 20
+}

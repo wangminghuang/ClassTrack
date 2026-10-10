@@ -1,0 +1,7 @@
+[
+  {"op":"scrollTo","top":9999,"out":"<tmp>/diag/04-programmatic-scroll.json","label":"programmatic-scroll-max"},
+  {"op":"scrollTo","top":0,"label":"reset"},
+  {"op":"touchDrag","x":205,"y1":520,"y2":180,"steps":15,"hold":10,"out":"<tmp>/diag/05-cdp-touch-drag.json","label":"cdp-touch-drag-up"},
+  {"op":"eval","expr":"JSON.stringify(window.__diag || {})","out":"<tmp>/diag/06-event-counters.json","label":"event-counters"},
+  {"op":"eval","expr":"(() => { const s = document.querySelector('[data-schedule-scroll]'); if(!s) return null; const r = s.getBoundingClientRect(); const d = devicePixelRatio; return { cssRect: {top:Math.round(r.top), left:Math.round(r.left), w:Math.round(r.width), h:Math.round(r.height)}, dpr: d, deviceSwipe: {x: Math.round((r.left + r.width/2)*d), y1: Math.round((r.top + r.height*0.85)*d), y2: Math.round((r.top + r.height*0.15)*d)} } })()","out":"<tmp>/diag/07-coords.json","label":"coords"}
+]

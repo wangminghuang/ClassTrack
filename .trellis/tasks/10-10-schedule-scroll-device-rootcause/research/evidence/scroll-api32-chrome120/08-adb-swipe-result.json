@@ -1,0 +1,14 @@
+{
+  "scroller": {
+    "scrollTop": 0,
+    "maxScrollTop": 0
+  },
+  "counters": {
+    "touchstart": 2,
+    "touchmove": 39,
+    "touchend": 2,
+    "scroll": 0,
+    "pointerdown": 2,
+    "pointermove": 2
+  }
+}

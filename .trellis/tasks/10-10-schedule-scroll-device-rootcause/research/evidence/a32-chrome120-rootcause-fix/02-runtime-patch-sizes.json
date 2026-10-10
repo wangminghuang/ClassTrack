@@ -1,0 +1,14 @@
+{
+  "scroller": {
+    "clientH": 510,
+    "scrollH": 780,
+    "max": 270
+  },
+  "grid": {
+    "clientH": 780,
+    "scrollH": 780,
+    "h": "780px",
+    "minH": "100%"
+  },
+  "rows": "36px 62px 62px 62px 62px 62px 62px 62px 62px 62px 62px 62px 62px"
+}

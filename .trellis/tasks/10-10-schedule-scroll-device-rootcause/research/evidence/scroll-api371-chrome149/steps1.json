@@ -1,0 +1,9 @@
+[
+  {"op":"evalFile","file":"<tmp>/probe.js","out":"<tmp>/diag/01-initial.json","label":"initial-state"},
+  {"op":"eval","expr":"localStorage.getItem('class-track-storage') ? 'seed-present' : 'seed-absent'","label":"storage-before"},
+  {"op":"evalFile","file":"<tmp>/ct-seed-write.js","label":"seed-write"},
+  {"op":"reload","wait":25000},
+  {"op":"evalFile","file":"<tmp>/probe.js","out":"<tmp>/diag/02-schedule.json","label":"schedule-page"},
+  {"op":"eval","expr":"(() => { window.__diag = {touchstart:0, touchmove:0, touchend:0, scroll:0, pointerdown:0, pointermove:0}; const bump = (k) => () => { window.__diag[k] += 1 }; document.addEventListener('touchstart', bump('touchstart'), {passive:true, capture:true}); document.addEventListener('touchmove', bump('touchmove'), {passive:true, capture:true}); document.addEventListener('touchend', bump('touchend'), {passive:true, capture:true}); document.addEventListener('scroll', bump('scroll'), {passive:true, capture:true}); document.addEventListener('pointerdown', bump('pointerdown'), {passive:true, capture:true}); document.addEventListener('pointermove', bump('pointermove'), {passive:true, capture:true}); const s = document.querySelector('[data-schedule-scroll]'); if (s) s.addEventListener('scroll', () => { window.__diag.scrollerScroll = (window.__diag.scrollerScroll||0)+1 }); return 'counters-installed' })()","label":"install-counters"},
+  {"op":"evalFile","file":"<tmp>/probe-touch.js","out":"<tmp>/diag/03-hit-test.json","label":"hit-test"}
+]

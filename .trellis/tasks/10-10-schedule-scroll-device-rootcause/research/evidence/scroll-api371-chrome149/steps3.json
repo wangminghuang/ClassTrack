@@ -1,0 +1,3 @@
+[
+  {"op":"eval","expr":"(() => { const s = document.querySelector('[data-schedule-scroll]'); return { scroller: s ? { scrollTop: s.scrollTop, maxScrollTop: s.scrollHeight - s.clientHeight } : null, counters: window.__diag || {} } })()","out":"<tmp>/diag/08-adb-swipe-result.json","label":"after-adb-swipe"}
+]

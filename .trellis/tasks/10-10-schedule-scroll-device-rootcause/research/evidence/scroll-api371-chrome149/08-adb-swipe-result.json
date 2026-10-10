@@ -1,0 +1,15 @@
+{
+  "scroller": {
+    "scrollTop": 278.8571472167969,
+    "maxScrollTop": 279
+  },
+  "counters": {
+    "touchstart": 2,
+    "touchmove": 35,
+    "touchend": 2,
+    "scroll": 14,
+    "pointerdown": 2,
+    "pointermove": 2,
+    "scrollerScroll": 14
+  }
+}

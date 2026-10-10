@@ -1,0 +1,20 @@
+{
+  "label": "m1 单指竖直（基线）",
+  "before": {
+    "scrollTop": 0,
+    "scrollLeft": 0,
+    "maxTop": 279,
+    "maxLeft": 0,
+    "zoomVar": "1",
+    "swipeState": "idle"
+  },
+  "after": {
+    "scrollTop": 278.8571472167969,
+    "scrollLeft": 0,
+    "maxTop": 279,
+    "maxLeft": 0,
+    "zoomVar": "1",
+    "swipeState": "idle"
+  },
+  "dispatchedFrames": 17
+}

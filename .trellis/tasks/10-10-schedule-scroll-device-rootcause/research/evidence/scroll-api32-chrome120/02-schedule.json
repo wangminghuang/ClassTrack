@@ -1,0 +1,232 @@
+{
+  "url": "https://localhost/",
+  "chrome": "120",
+  "ua": "Mozilla/5.0 (Linux; Android 12; sdk_gphone64_x86_64 Build/SE1B.240122.005; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120.0.6099.193 Mobile Safari/537.36",
+  "supportsDvh": true,
+  "viewport": {
+    "innerW": 412,
+    "innerH": 692,
+    "dpr": 2.625,
+    "visualScale": 1
+  },
+  "htmlHeight": "692.19px",
+  "bodyHeight": "692.19px",
+  "bodyOverflow": "hidden",
+  "appViewport": {
+    "sel": "div.group/sidebar-wrapper.flex.min-h-svh.w-full",
+    "rect": {
+      "top": 0,
+      "left": 0,
+      "w": 412,
+      "h": 692
+    },
+    "height": "692.19px",
+    "minHeight": "0px",
+    "maxHeight": "100%",
+    "overflowY": "hidden",
+    "overflow": "hidden",
+    "touchAction": "auto",
+    "flex": "0 1 auto",
+    "display": "flex",
+    "position": "static",
+    "transform": "none",
+    "inlineTransform": null,
+    "clientH": 692,
+    "scrollH": 692
+  },
+  "hasScrollContainer": true,
+  "courseCells": 18,
+  "hasImportDialog": false,
+  "bodyTextHead": "第 3 周 返回本周 9月 周一 09.14 周二 09.15 周三 09.16 周四 09.17 周五 09.18 周六 09.19 周日 09.20 1 08:00 2 09:40 3 10:10 4 11:50 5 14:00 6 1",
+  "scroller": {
+    "clientH": 510,
+    "scrollH": 510,
+    "scrollTop": 0,
+    "maxScrollTop": 0,
+    "clientW": 395,
+    "scrollW": 395,
+    "maxScrollLeft": 0
+  },
+  "pageScroll": {
+    "docScrollH": 692,
+    "winScrollY": 0
+  },
+  "chain": [
+    {
+      "sel": "div[data-schedule-scroll].min-h-0.flex-1.overflow-x-auto.overflow-y-auto",
+      "rect": {
+        "top": 104,
+        "left": 8,
+        "w": 396,
+        "h": 511
+      },
+      "height": "511.429px",
+      "minHeight": "0px",
+      "maxHeight": "none",
+      "overflowY": "auto",
+      "overflow": "auto",
+      "touchAction": "pan-x pan-y",
+      "flex": "1 1 0%",
+      "display": "block",
+      "position": "static",
+      "transform": "none",
+      "inlineTransform": null,
+      "clientH": 510,
+      "scrollH": 510
+    },
+    {
+      "sel": "div[data-schedule-swipe-stage].flex.min-h-0.flex-1.flex-col",
+      "rect": {
+        "top": 104,
+        "left": 8,
+        "w": 396,
+        "h": 511
+      },
+      "height": "511.429px",
+      "minHeight": "0px",
+      "maxHeight": "none",
+      "overflowY": "hidden",
+      "overflow": "hidden",
+      "touchAction": "auto",
+      "flex": "1 1 0%",
+      "display": "flex",
+      "position": "static",
+      "transform": "none",
+      "inlineTransform": null,
+      "clientH": 511,
+      "scrollH": 511
+    },
+    {
+      "sel": "div.relative.flex.min-h-0.flex-1",
+      "rect": {
+        "top": 104,
+        "left": 8,
+        "w": 396,
+        "h": 511
+      },
+      "height": "511.429px",
+      "minHeight": "0px",
+      "maxHeight": "none",
+      "overflowY": "visible",
+      "overflow": "visible",
+      "touchAction": "auto",
+      "flex": "1 1 0%",
+      "display": "flex",
+      "position": "relative",
+      "transform": "none",
+      "inlineTransform": null,
+      "clientH": 511,
+      "scrollH": 511
+    },
+    {
+      "sel": "div.mx-auto.flex.min-h-0.w-full",
+      "rect": {
+        "top": 12,
+        "left": 8,
+        "w": 396,
+        "h": 603
+      },
+      "height": "603.429px",
+      "minHeight": "0px",
+      "maxHeight": "none",
+      "overflowY": "visible",
+      "overflow": "visible",
+      "touchAction": "auto",
+      "flex": "1 1 0%",
+      "display": "flex",
+      "position": "static",
+      "transform": "none",
+      "inlineTransform": null,
+      "clientH": 603,
+      "scrollH": 603
+    },
+    {
+      "sel": "div.flex.h-full.min-h-0.flex-col",
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "w": 412,
+        "h": 627
+      },
+      "height": "627.429px",
+      "minHeight": "0px",
+      "maxHeight": "none",
+      "overflowY": "hidden",
+      "overflow": "hidden",
+      "touchAction": "auto",
+      "flex": "0 1 auto",
+      "display": "flex",
+      "position": "static",
+      "transform": "none",
+      "inlineTransform": null,
+      "clientH": 627,
+      "scrollH": 627
+    },
+    {
+      "sel": "main.relative.flex.w-full.flex-col",
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "w": 412,
+        "h": 627
+      },
+      "height": "627.429px",
+      "minHeight": "0px",
+      "maxHeight": "none",
+      "overflowY": "hidden",
+      "overflow": "hidden",
+      "touchAction": "auto",
+      "flex": "1 1 0%",
+      "display": "flex",
+      "position": "relative",
+      "transform": "none",
+      "inlineTransform": null,
+      "clientH": 627,
+      "scrollH": 627
+    },
+    {
+      "sel": "div.group/sidebar-wrapper.flex.min-h-svh.w-full",
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "w": 412,
+        "h": 692
+      },
+      "height": "692.19px",
+      "minHeight": "0px",
+      "maxHeight": "100%",
+      "overflowY": "hidden",
+      "overflow": "hidden",
+      "touchAction": "auto",
+      "flex": "0 1 auto",
+      "display": "flex",
+      "position": "static",
+      "transform": "none",
+      "inlineTransform": null,
+      "clientH": 692,
+      "scrollH": 692
+    },
+    {
+      "sel": "body",
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "w": 412,
+        "h": 692
+      },
+      "height": "692.19px",
+      "minHeight": "0px",
+      "maxHeight": "none",
+      "overflowY": "hidden",
+      "overflow": "hidden",
+      "touchAction": "auto",
+      "flex": "0 1 auto",
+      "display": "block",
+      "position": "static",
+      "transform": "none",
+      "inlineTransform": null,
+      "clientH": 692,
+      "scrollH": 692
+    }
+  ]
+}

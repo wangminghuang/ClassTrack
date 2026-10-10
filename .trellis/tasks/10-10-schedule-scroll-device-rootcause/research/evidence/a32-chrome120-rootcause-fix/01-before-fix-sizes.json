@@ -1,0 +1,33 @@
+{
+  "scroller": {
+    "clientH": 510,
+    "scrollH": 510,
+    "max": 0,
+    "h": "511.429px",
+    "overflowY": "auto",
+    "touchAction": "pan-x pan-y"
+  },
+  "grid": {
+    "clientH": 510,
+    "scrollH": 780,
+    "max": 270,
+    "h": "509.905px",
+    "overflowY": "visible",
+    "touchAction": "auto"
+  },
+  "gridRows": "36px 62px 62px 62px 62px 62px 62px 62px 62px 62px 62px 62px 62px",
+  "viewH": 692,
+  "panel": false,
+  "cells": 18,
+  "programmaticScrollTop9999": {
+    "scrollTop": 0,
+    "maxScrollTop": 0
+  },
+  "adbSystemSwipe": {
+    "scrollerTop": 0,
+    "scrollerMax": 0,
+    "gridScrollH": 780,
+    "gridClientH": 510,
+    "gridTop": 105
+  }
+}

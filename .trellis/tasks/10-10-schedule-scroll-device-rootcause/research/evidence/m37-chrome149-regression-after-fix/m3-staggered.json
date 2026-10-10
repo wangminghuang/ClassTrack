@@ -1,0 +1,20 @@
+{
+  "label": "m3 中途落下第二指",
+  "before": {
+    "scrollTop": 0,
+    "scrollLeft": 0,
+    "maxTop": 279,
+    "maxLeft": 0,
+    "zoomVar": "1",
+    "swipeState": "idle"
+  },
+  "after": {
+    "scrollTop": 0,
+    "scrollLeft": 0,
+    "maxTop": 279,
+    "maxLeft": 394,
+    "zoomVar": "2",
+    "swipeState": "idle"
+  },
+  "dispatchedFrames": 18
+}

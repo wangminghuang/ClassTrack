@@ -1,0 +1,13 @@
+{
+  "zoom": "2",
+  "grid": {
+    "clientH": 780,
+    "scrollH": 780
+  },
+  "scroller": {
+    "clientH": 510,
+    "scrollH": 780,
+    "maxTop": 270,
+    "maxLeft": 394
+  }
+}

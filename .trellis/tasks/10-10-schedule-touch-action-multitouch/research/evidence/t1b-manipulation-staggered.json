@@ -1,0 +1,20 @@
+{
+  "label": "t1b 中途落第二指、双指等距下移（manipulation）",
+  "before": {
+    "scrollTop": 0,
+    "scrollLeft": 0,
+    "maxTop": 279,
+    "maxLeft": 0,
+    "zoomVar": "1",
+    "swipeState": "idle"
+  },
+  "after": {
+    "scrollTop": 10.285714149475098,
+    "scrollLeft": 0,
+    "maxTop": 279,
+    "maxLeft": 0,
+    "zoomVar": "1",
+    "swipeState": "idle"
+  },
+  "dispatchedFrames": 15
+}

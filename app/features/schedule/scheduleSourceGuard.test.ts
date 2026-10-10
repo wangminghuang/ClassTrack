@@ -101,4 +101,21 @@ describe('schedule 目录源码守卫', () => {
     expect(cell).toContain("from './cellScale'")
     expect(table).toContain("from './cellScale'")
   })
+  // 回归守卫（任务 `10-10-schedule-scroll-device-rootcause`）：网格高度必须「至少填满容器、再随内容长高」。
+  // 钉死成 `h-full` 会让 12 节行（36px 表头 + 12×62px = 780px）溢出网格自己的盒子，而 Android WebView 120
+  // （真机实测，API 32 / Chrome 120，跑用户装的 beta-29）**不把这段行溢出算进祖先 `[data-schedule-scroll]`
+  // 的可滚区域** ⇒ `scrollHeight == clientHeight`、`maxScrollTop == 0`，表现为「课表整体滑不动、
+  // 第 9~12 节永远到不了」；改成 `min-h-full` 后同一台引擎实测可滚到 270（= max）。
+  it('课表网格不得钉死为容器高度（h-full）', () => {
+    const table = readFileSync(join(SCHEDULE_DIR, 'ScheduleTable.tsx'), 'utf8')
+    const gridAt = table.indexOf('data-schedule-grid')
+
+    expect(gridAt).toBeGreaterThan(-1)
+    expect(table).not.toContain("'grid h-full")
+    expect(table).toContain("'grid min-h-full")
+    // 网格节点的 class 里确实带着 min-h-full（防止上面两条被别处的字符串满足）。
+    expect(table.slice(gridAt, gridAt + 1200)).toContain('min-h-full')
+    // 12 节最小行高契约仍在：它正是「手机一屏放不下 12 节、必须能滚」的前提。
+    expect(table).toContain('grid-rows-[2.25rem_repeat(12,minmax(3.875rem,1fr))]')
+  })
 })

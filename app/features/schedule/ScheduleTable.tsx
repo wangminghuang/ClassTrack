@@ -125,7 +125,12 @@ export default function ScheduleTable({
             data-zoom-level={zoom}
             data-zoom-tier={detailLevel}
             className={cn(
-              'grid h-full min-w-[calc(100%*var(--schedule-zoom,1))] grid-rows-[2.25rem_repeat(12,minmax(3.875rem,1fr))] md:min-w-[760px]',
+              // `min-h-full` 而不是 `h-full`：高度必须「至少填满容器、再随内容长高」。
+              // 钉死成容器高（h-full）会让 12 节行（36px 表头 + 12×62px = 780px）溢出网格自己的盒子，
+              // 而 Android WebView 120（真机实测，API 32 / Chrome 120）不把这段行溢出算进祖先
+              // `[data-schedule-scroll]` 的可滚区域 ⇒ scrollHeight == clientHeight，课表整体滑不动、
+              // 第 9~12 节永远到不了。详见任务 10-10-schedule-scroll-device-rootcause。
+              'grid min-h-full min-w-[calc(100%*var(--schedule-zoom,1))] grid-rows-[2.25rem_repeat(12,minmax(3.875rem,1fr))] md:min-w-[760px]',
               GRID_CONTAINER_CLASS,
               // 关闭开关时列模板与历史实现逐字符一致（手机 2rem 节次列 / 桌面 4rem 节次列 + 7 个等宽列），
               // 由 class 提供；开启时改由内联样式给出，这两条 class 直接不参与。

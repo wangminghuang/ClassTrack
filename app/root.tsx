@@ -12,6 +12,7 @@ import WidgetSnapshotSync from '~/components/native-widget/WidgetSnapshotSync'
 import WidgetGuideDialog from '~/components/native-widget/WidgetGuideDialog'
 import ProfileGuideDialog from '~/components/native-widget/ProfileGuideDialog'
 import UpdateCheckRunner from '~/components/app-update/UpdateCheckRunner'
+import ScheduleScrollDiagnosticsPanel from '~/features/diagnostics/ScheduleScrollDiagnosticsPanel'
 import './app.css'
 import React from 'react'
 
@@ -53,6 +54,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           所以只能挂一处。非 Android 时它内部直接不渲染 —— PWA 的更新提示仍由 PwaUpdatePrompt 负责。
         */}
         {!nativeShell && <UpdateCheckRunner />}
+        {/* 课表滚动诊断浮层（诊断包专用）：默认关闭（`diagnosticFlags.ts`），诊断分支随包开启。见任务 10-10-schedule-scroll-device-rootcause。 */}
+        {!nativeShell && <ScheduleScrollDiagnosticsPanel />}
         {!nativeShell && <ScrollRestoration />}
         <Scripts />
       </body>

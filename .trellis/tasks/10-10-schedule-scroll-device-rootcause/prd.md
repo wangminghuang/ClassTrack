@@ -146,7 +146,7 @@
       —— `typecheck` 0 错、`eslint` 干净、`prettier --check` 通过、`pnpm test` **47 文件 432 例**、
       `webview:check-css` + `test:webview-css` 通过、`pnpm build` 通过（诊断分支含 504ee9a）。
 - [x] **AC-8** 仓库内不含环境凭据/本地绝对路径。
-      —— 任务目录已自检（`/tmp/`、`/media/`、凭据关键词零命中），旧证据里的临时目录写法已替换为 `<tmp>` 占位符。
+      —— 任务目录已自检：临时目录、家目录绝对路径与凭据关键词三类扫描均零命中；旧证据里的临时目录写法已统一替换为占位符。
 
 ## Notes
 

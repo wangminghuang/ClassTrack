@@ -1,0 +1,301 @@
+{
+  "cpuRate": 1,
+  "environment": {
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+    "width": 412,
+    "height": 731,
+    "cells": 18,
+    "gridWidth": 379
+  },
+  "touch": [
+    {
+      "plan": "pinch-out-1x→2x",
+      "expectTier": 2,
+      "gesture": {
+        "frames": 81,
+        "maxFrameGap": 16.800000000000182,
+        "p95FrameGap": 16.700000000000728,
+        "longTasks": [],
+        "worstLongTask": 0,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": null,
+        "loafCount": 0,
+        "styleWrites": 2
+      },
+      "afterRelease": {
+        "frames": 34,
+        "maxFrameGap": 33.399999999999636,
+        "p95FrameGap": 33.30000000000018,
+        "longTasks": [
+          56
+        ],
+        "worstLongTask": 56,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": 8.1,
+        "loafCount": 1,
+        "styleWrites": 2
+      },
+      "finalZoomLevel": 2,
+      "geometry": {
+        "containerClient": [
+          379,
+          533
+        ],
+        "containerOffset": [
+          396,
+          550
+        ],
+        "scrollbar": [
+          17,
+          17
+        ],
+        "grid": [
+          758,
+          780
+        ],
+        "cell": [
+          101,
+          121
+        ],
+        "key": "m1|毛泽东思想和中国特色社会主义理论体系概论|28-A203|王芳|||1-2",
+        "cells": 18,
+        "columns": "32px 103.703px 103.719px 103.719px 103.703px 103.719px 103.719px 103.719px"
+      },
+      "committed": {
+        "scrollWidth": 379,
+        "clientWidth": 379,
+        "gridWidth": 379,
+        "zoomLevel": 1
+      },
+      "during": {
+        "scrollWidth": 379,
+        "clientWidth": 379,
+        "gridWidth": 379,
+        "zoomLevel": 1,
+        "stageTransform": "translateX(-198px) scaleX(2)",
+        "stageFilter": "blur(3px)",
+        "stagePreview": "preview",
+        "warmupHost": false
+      }
+    },
+    {
+      "plan": "pinch-in-2x→1x",
+      "expectTier": 1,
+      "gesture": {
+        "frames": 81,
+        "maxFrameGap": 16.800000000000182,
+        "p95FrameGap": 16.800000000000182,
+        "longTasks": [],
+        "worstLongTask": 0,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": null,
+        "loafCount": 0,
+        "styleWrites": 2
+      },
+      "afterRelease": {
+        "frames": 34,
+        "maxFrameGap": 33.400000000000546,
+        "p95FrameGap": 33.29999999999927,
+        "longTasks": [
+          58
+        ],
+        "worstLongTask": 58,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": 10.5,
+        "loafCount": 1,
+        "styleWrites": 2
+      },
+      "finalZoomLevel": 1,
+      "geometry": {
+        "containerClient": [
+          379,
+          548
+        ],
+        "containerOffset": [
+          396,
+          550
+        ],
+        "scrollbar": [
+          17,
+          2
+        ],
+        "grid": [
+          379,
+          780
+        ],
+        "cell": [
+          47,
+          121
+        ],
+        "key": "m1|毛泽东思想和中国特色社会主义理论体系概论|28-A203|王芳|||1-2",
+        "cells": 18,
+        "columns": "32px 49.5625px 49.5781px 49.5625px 49.5781px 49.5625px 49.5781px 49.5781px"
+      },
+      "committed": {
+        "scrollWidth": 758,
+        "clientWidth": 379,
+        "gridWidth": 758,
+        "zoomLevel": 2
+      },
+      "during": {
+        "scrollWidth": 758,
+        "clientWidth": 379,
+        "gridWidth": 758,
+        "zoomLevel": 2,
+        "stageTransform": "translateX(99px) scaleX(0.5)",
+        "stageFilter": "blur(3px)",
+        "stagePreview": "preview",
+        "warmupHost": false
+      }
+    },
+    {
+      "plan": "pinch-out-1x→2x",
+      "expectTier": 2,
+      "gesture": {
+        "frames": 81,
+        "maxFrameGap": 16.80000000000109,
+        "p95FrameGap": 16.799999999999272,
+        "longTasks": [],
+        "worstLongTask": 0,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": null,
+        "loafCount": 0,
+        "styleWrites": 2
+      },
+      "afterRelease": {
+        "frames": 35,
+        "maxFrameGap": 33.399999999999636,
+        "p95FrameGap": 16.80000000000109,
+        "longTasks": [],
+        "worstLongTask": 0,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": null,
+        "loafCount": 0,
+        "styleWrites": 2
+      },
+      "finalZoomLevel": 2,
+      "geometry": {
+        "containerClient": [
+          379,
+          533
+        ],
+        "containerOffset": [
+          396,
+          550
+        ],
+        "scrollbar": [
+          17,
+          17
+        ],
+        "grid": [
+          758,
+          780
+        ],
+        "cell": [
+          101,
+          121
+        ],
+        "key": "m1|毛泽东思想和中国特色社会主义理论体系概论|28-A203|王芳|||1-2",
+        "cells": 18,
+        "columns": "32px 103.703px 103.719px 103.719px 103.703px 103.719px 103.719px 103.719px"
+      },
+      "committed": {
+        "scrollWidth": 379,
+        "clientWidth": 379,
+        "gridWidth": 379,
+        "zoomLevel": 1
+      },
+      "during": {
+        "scrollWidth": 379,
+        "clientWidth": 379,
+        "gridWidth": 379,
+        "zoomLevel": 1,
+        "stageTransform": "translateX(-198px) scaleX(2)",
+        "stageFilter": "blur(3px)",
+        "stagePreview": "preview",
+        "warmupHost": false
+      }
+    },
+    {
+      "plan": "pinch-in-2x→1x",
+      "expectTier": 1,
+      "gesture": {
+        "frames": 81,
+        "maxFrameGap": 16.80000000000109,
+        "p95FrameGap": 16.700000000000728,
+        "longTasks": [],
+        "worstLongTask": 0,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": null,
+        "loafCount": 0,
+        "styleWrites": 2
+      },
+      "afterRelease": {
+        "frames": 35,
+        "maxFrameGap": 33.29999999999927,
+        "p95FrameGap": 16.799999999999272,
+        "longTasks": [],
+        "worstLongTask": 0,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": null,
+        "loafCount": 0,
+        "styleWrites": 2
+      },
+      "finalZoomLevel": 1,
+      "geometry": {
+        "containerClient": [
+          379,
+          548
+        ],
+        "containerOffset": [
+          396,
+          550
+        ],
+        "scrollbar": [
+          17,
+          2
+        ],
+        "grid": [
+          379,
+          780
+        ],
+        "cell": [
+          47,
+          121
+        ],
+        "key": "m1|毛泽东思想和中国特色社会主义理论体系概论|28-A203|王芳|||1-2",
+        "cells": 18,
+        "columns": "32px 49.5625px 49.5781px 49.5625px 49.5781px 49.5625px 49.5781px 49.5781px"
+      },
+      "committed": {
+        "scrollWidth": 758,
+        "clientWidth": 379,
+        "gridWidth": 758,
+        "zoomLevel": 2
+      },
+      "during": {
+        "scrollWidth": 758,
+        "clientWidth": 379,
+        "gridWidth": 758,
+        "zoomLevel": 2,
+        "stageTransform": "translateX(99px) scaleX(0.5)",
+        "stageFilter": "blur(3px)",
+        "stagePreview": "preview",
+        "warmupHost": false
+      }
+    }
+  ],
+  "sweep": [],
+  "control": [],
+  "preview": [],
+  "summary": {
+    "touchWorstFrameGap": 16.80000000000109,
+    "touchWorstLongTask": 0,
+    "touchStyleWrites": 8,
+    "sweepWorstFrameGap": 0,
+    "sweepWorstLongTask": 0,
+    "sweepStyleWrites": 0,
+    "control": [],
+    "preview": []
+  }
+}

@@ -162,6 +162,12 @@ if (mode === 'touch' || mode === 'both') {
   ]
   for (const plan of plans) {
     await evaluate(`(() => { const el=document.querySelector('[data-schedule-scroll]'); el.scrollTop=0; el.scrollLeft=0; return true })()`)
+    // 手势前的落定态读数：手势期里这些数字必须一动不动（AC6：预览不许污染 scrollWidth）。
+    const committed = await evaluate(`(() => {
+      const scroll = document.querySelector('[data-schedule-scroll]');
+      const grid = document.querySelector('[data-schedule-grid]');
+      return { scrollWidth: scroll.scrollWidth, clientWidth: scroll.clientWidth, gridWidth: grid.offsetWidth, zoomLevel: Number(grid.dataset.zoomLevel) };
+    })()`)
     await beginWindow()
     const centerX = 206
     const centerY = 400
@@ -179,16 +185,40 @@ if (mode === 'touch' || mode === 'both') {
       await sleep(16)
     }
     const beforeRelease = await evaluate('performance.now()')
+    // 手势期（松手前）读数：只许 stage 上有变换 + 模糊，档位、网格宽、scrollWidth 都不许变。
+    const during = await evaluate(`(() => {
+      const scroll = document.querySelector('[data-schedule-scroll]');
+      const grid = document.querySelector('[data-schedule-grid]');
+      const stage = document.querySelector('[data-schedule-zoom-stage]');
+      return {
+        scrollWidth: scroll.scrollWidth,
+        clientWidth: scroll.clientWidth,
+        gridWidth: grid.offsetWidth,
+        zoomLevel: Number(grid.dataset.zoomLevel),
+        stageTransform: stage.style.transform,
+        stageFilter: stage.style.filter,
+        stagePreview: stage.dataset.scheduleZoomPreview ?? null,
+        warmupHost: Boolean(document.querySelector('[data-schedule-zoom-warmup]')),
+      };
+    })()`)
     await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
     await sleep(800)
     const window = await collectWindow()
     const gesture = summarize(window, window.start, beforeRelease)
     const afterRelease = summarize(window, beforeRelease, beforeRelease + 600)
-    const run = { plan: plan.name, expectTier: plan.expect, gesture, afterRelease, finalZoomLevel: window.zoomLevel, geometry: window.geometry }
+    const run = { plan: plan.name, expectTier: plan.expect, gesture, afterRelease, finalZoomLevel: window.zoomLevel, geometry: window.geometry, committed, during }
     report.touch.push(run)
     if (output) writeFileSync(output, JSON.stringify(report, null, 2) + '\n')
-    console.log(JSON.stringify({ mode: 'touch', ...run }))
+    console.log(JSON.stringify({ mode: 'touch', ...run, frameGaps: undefined }))
     assert.equal(window.zoomLevel, plan.expect, `${plan.name}: 松手后必须吸附到 ${plan.expect}x`)
+    // AC6：手势期里预览只许动 stage 的变换，档位 / 网格宽 / scrollWidth 都不许被带动。
+    assert.equal(during.stagePreview, 'preview', `${plan.name}: 手势期 stage 必须标着 preview 相位`)
+    assert.ok(during.stageTransform.includes('scaleX'), `${plan.name}: 手势期必须有 scaleX 预览`)
+    assert.equal(during.stageFilter, 'blur(3px)', `${plan.name}: 手势期必须有模糊`)
+    assert.equal(during.warmupHost, false, `${plan.name}: 交互开始后不得还有预热宿主`)
+    assert.equal(during.zoomLevel, committed.zoomLevel, `${plan.name}: 手势期档位不许变`)
+    assert.equal(during.gridWidth, committed.gridWidth, `${plan.name}: 手势期不得重排网格（宽度必须不动）`)
+    assert.equal(during.scrollWidth, committed.scrollWidth, `${plan.name}: 手势期 scrollWidth 不许被预览污染`)
   }
 }
 

@@ -335,3 +335,57 @@ tier2   #a4#m0 ×4, #a2#m0  ← 同上
 - 预热只在「用户 500ms 内没碰课表且之后有空闲帧」时才能跑完。打开就立刻捏合的用户仍会走一次
   实测 —— 这是刻意的取舍：抢在用户前面算完是赚，抢用户的时间是亏。
 - 本机是桌面 Chrome + 软件栅格化（§6），真机数字未测；上面全部结论都是同环境内的相对比较。
+
+## 11. 收口：规范、源码守卫与全量复跑（P6）
+
+P6 不动运行时代码，只做三件事：把这次改造写进规范、把它变成会失败的测试、用同一套读数复跑一遍。
+
+### 11.1 规范（`.trellis/spec/frontend/mobile-schedule-layout.md`）
+
+- 「Zoom Tiers and Information Levels」里原来那句「**不引入任何等比缩放**（不用 CSS `zoom`、不用
+  `transform: scale`）」改成「档位切换本身只改列宽」，等比缩放的禁令下移到新的受控例外小节。
+- 新增「**缩放的两段式：手势期预览 → 落定**」：状态机、预览的换算与挂载点、落定的写入顺序
+  （档位 → 宽度 → `scrollLeft` → 清变换）、**受控例外**的准确边界（只允许 `preview` / `settling`
+  两个相位、只允许 `scaleX` + `translateX`、只允许挂 stage、静止态必须清空）、观测锚点。
+- 新增「**档位排布预计算**」：三层键的构成与两条容易写错的取法（宽取滚容器、高取网格；列模板取
+  内联 style）、内容改键即变、两个填充来源、预热可取消。
+- Test Hooks 表新增 4 行：`data-schedule-zoom-stage`（并说明 `transform`/`filter` 只许写在这一层）、
+  `data-course-key`、`data-schedule-zoom-preview`、`data-schedule-zoom-warmup`。
+- Common Mistakes 新增 7 条（全是这次踩过或差点踩的）：手势里实时改宽度、变换挂错层、落定顺序、
+  拿 `getComputedStyle` 做几何键、「几何变了就清表」、`ResizeObserver` 推送几何、预热克隆污染读数。
+
+### 11.2 源码守卫（`app/features/schedule/scheduleSourceGuard.test.ts`）
+
+新增一个 `describe('缩放预览的受控例外边界')`，8 条断言（守卫从 8 条到 16 条）：
+
+| 断言 | 防的是什么 |
+| --- | --- |
+| 只有白名单文件写内联 `transform` / `filter` | 别处偷偷加变换（`useScheduleZoom` 与既有横滑 `useWeekSwipeGesture` 之外一律不许） |
+| 白名单本身没写错 | 防止路径改名后守卫静默空跑 |
+| 缩放预览的每一次变换写入都以 `stage` 为目标 | 目标错成网格/滚容器就会污染 `scrollWidth` 与边缘阻尼 |
+| 预览不碰网格与滚容器的内联样式（含表组件里不许出现 `.style.transform`） | 同上，从表组件侧再堵一次 |
+| 不用 CSS `zoom`、不用 `transform: scale`、不用 `scale-<n>` 类 | 「2x 退化成放大镜」的两条老禁令 |
+| `blur(<数字>` 只许出现在 `zoomPreview.ts` | 模糊半径单一真源 |
+| `.style.transition` 里不许写 `\d+ms` 字面量，且必须从 `zoomPreview` 引常量 | 时长单一真源 |
+| stage 节点同时带 `data-schedule-swipe-stage` / `data-schedule-zoom-stage`、裁剪层 `overflow-hidden`、`ref={zoomStageRef}` | 变换靠裁剪层兜住预览多出来的部分 |
+
+### 11.3 复跑（全部读数在本次提交里）
+
+| 项 | 命令 | 读数 |
+| --- | --- | --- |
+| AC1 + AC6（手势期不带动任何真实盒子） | `PREWAIT_MS=3000 run-zoom-perf.sh 1 p6-after-spec.json touch` | 四轮手势期零长任务 / 最大帧间隔 16.8ms；脚本内新增断言全过：手势期 `gridWidth`、`scrollWidth`、`zoomLevel` 与手势前逐项相同，stage 上是 `scaleX` + `blur(3px)` + `preview` 相位，预热宿主已卸载 |
+| AC6（切周回归） | `PERF_ASSERT=1 run-browser-perf.sh 1 p6-week-switch.json` | `worstFrameGap 33.4ms` / `worstLongTask 0`（脚本自带断言：每次手势恰好切一周、终态 `idle`、`transform`/`opacity` 清空） |
+| AC5（三档逐格） | `run-zoom-layout-verify.sh p6-ac5.json` | 360×794 / 412×731 / 1440×900 三视口 **violations 全 0**（与 P5 那次同代码同结果） |
+| AC3/AC4（静止态） | `run-zoom-rest.sh p6-zoom-rest.json` | **12 项全过** |
+| AC7（七项门禁） | `pnpm test` / `typecheck` / `lint` / `format:check` / `build` / `webview:check-css` / `test:android-assets` | **471 tests / 50 files** 全绿，其余六项全绿 |
+
+### 11.4 未验证范围（如实列出）
+
+- **真机未测**：上面所有数字都来自本机桌面 Chrome（软件栅格化、DPR 2 的模拟视口）。合成层变换的
+  收益在真机上只会更大（这块本来就是 GPU 合成），但**没有真机读数**，别把它当已验证。
+- **窄屏 / 超长内容**：夹具是 18 格（含 7 行跨度的长课名）。格数更多、内容更长的课表，缓存条目数与
+  预热切片数都会涨（`CACHE_MAX_ENTRIES = 128` 是「1 套几何 × 18 格 × 3 档」的两倍余量，不是按别的
+  课表算的）。
+- **`reduce` 分支**只验了「过渡时长为 0、不加模糊」与终态，没有验「用户中途打开系统 reduce」。
+- **预热与横滑的交叉**：预热会被横滑取消（脚本里验了 `warmupHost=false`），但没有验「预热进行到一半
+  时用户横滑」的完整时序。

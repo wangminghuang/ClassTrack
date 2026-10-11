@@ -236,12 +236,14 @@ pnpm test:android-assets
 
 ## 完成判据（对照 PRD）
 
-| 验收 | 落点 |
-| --- | --- |
-| AC1 | P2 门 + P6 复跑 |
-| AC2 | P1 单测 + P4 浏览器复核（命中即零**格子**测量；批次开头的一次容器级读取为明确豁免，读数 `research/README.md` §9.3） |
-| AC3 | P3 门 |
-| AC4 | P3 门（含 `reduce` 分支） |
-| AC5 | P4 门 + P6 复跑 |
-| AC6 | P6 复跑 |
-| AC7 | P6 门 |
+逐条核验（每条都指到具体读数文件，读数都在 `research/`）：
+
+| 验收 | 门 | 读数 / 证据 | 结论 |
+| --- | --- | --- | --- |
+| AC1 | P2 + P6 复跑 | 基线 200ms 长任务 / 202ms 最大帧间隔 → 手势期 **零长任务**、最大帧间隔 **16.8ms**（`p2-after-preview.json`、`p4-after-cache.json`、`p5-after-warmup.json`、`p6-after-spec.json`） | ✅ 达标（基线 200ms → 0） |
+| AC2 | P1 单测 + P4 复核 | `cellLayout.test.ts` 里命中路径用「一读就抛」的作业驱动；浏览器侧 `p4-hit-miss.json` 显示每个 (几何, 档位) 首访 `a0#m18`、之后 `a18#m0` | ✅ 达标（批次开头一次容器级几何读取是明确豁免） |
+| AC3 | P3 + P6 复跑 | `p3-zoom-rest.json` / `p6-zoom-rest.json`：**12 项静止态检查**全过（内联 `transform`/`filter`/`transition` 清空、computed `none`、无预览锚点、`data-zoom-level` 与网格宽等于档位） | ✅ 达标 |
+| AC4 | P3 门 | 三条入口同一终态（按钮 / 双击 / 捏合）+ 常量单一真源单测 + `reduce` 时长为 0（`zoomPreview.test.ts`、`verify-zoom-rest.mjs` 的 reduce 三项） | ✅ 达标 |
+| AC5 | P4 + P6 复跑 | `p4-ac5.json.*` / `p5-ac5.json.*` / `p6-ac5.json.*` 三视口逐格断言 **violations 全 0**（桌面缺 1.5x 入口，写进 `summary.skipped`） | ✅ 达标 |
+| AC6 | P6 复跑 | `p6-week-switch.json`：一次手势恰切一周、终态 `idle`、`transform`/`opacity` 清空、`worstFrameGap 33.4ms` / `worstLongTask 0`；`p6-after-spec.json` 的手势期断言证明 `scrollWidth` 未被预览污染 | ✅ 达标 |
+| AC7 | P6 门 | 七项门禁全绿 + `scheduleSourceGuard.test.ts` 新增 8 条受控例外断言（守卫 16 条全过） | ✅ 达标 |

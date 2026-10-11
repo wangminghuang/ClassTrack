@@ -1,6 +1,6 @@
 import { format } from 'date-fns'
 import { Minus, Plus } from 'lucide-react'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import { useIsMobile } from '~/hooks/use-mobile'
 import type { Class, ClassMark } from '~/lib/types'
@@ -8,12 +8,15 @@ import { getMarkKey } from '~/store/utils'
 import { useScheduleDisplayStore } from '~/store/scheduleDisplayStore'
 import { cn } from '~/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip'
+import { setCellLayoutGeometryReader } from './cellLayout'
 import { CELL_CONTAINER_CLASS, GRID_CONTAINER_CLASS, cellScaleStyle } from './cellScale'
+import { geometryKeyOf } from './cellLayoutCache'
 import { resolveCourseTheme } from './courseColor'
 import { dayNames, sections, weekDays } from './constants'
 import ScheduleCourseCell from './ScheduleCourseCell'
 import { useScheduleZoom } from './hooks/useScheduleZoom'
 import { useWeekSwipeGesture } from './hooks/useWeekSwipeGesture'
+import { useZoomTierWarmup } from './hooks/useZoomTierWarmup'
 import { getDayDate } from './utils'
 import type { SectionTime, VisibleCourse } from './utils'
 
@@ -56,7 +59,7 @@ export default function ScheduleTable({
   onDayHeaderClick,
 }: ScheduleTableProps) {
   const isMobile = useIsMobile()
-  const { zoom, detailLevel, scrollRef, gridRef, containerProps, zoomIn, zoomOut, canZoomIn, canZoomOut } = useScheduleZoom()
+  const { zoom, detailLevel, scrollRef, zoomStageRef, gridRef, containerProps, zoomIn, zoomOut, canZoomIn, canZoomOut } = useScheduleZoom()
 
   const collapseEmptyWeekdayColumns = useScheduleDisplayStore((state) => state.collapseEmptyWeekdayColumns)
   const edgeSwipeWeekSwitch = useScheduleDisplayStore((state) => state.edgeSwipeWeekSwitch)
@@ -97,6 +100,33 @@ export default function ScheduleTable({
     return [sectionTrack, ...dayTracks].join(' ')
   }, [isMobile, busyDays])
 
+  // 排布缓存要的「当前几何」由这里提供：只有这一层知道滚容器、列模板与断点（构成见 `geometryKeyOf`）。
+  // 交给缓存的是**读取器**而不是每次变化推一次值 —— 推送会晚一帧，而落定那一帧紧接着就要用它，
+  // 晚一帧的结果是「刚量过的档位白量」（见 `setCellLayoutGeometryReader` 的记录）。
+  // 宽取滚容器、高取网格：这一对在档位之间不变，因此三档共用同一套几何键（见 `geometryKeyOf`）。
+  useEffect(() => {
+    setCellLayoutGeometryReader(() => {
+      const grid = gridRef.current
+      const scroll = scrollRef.current
+      if (!grid || !scroll) return ''
+
+      return geometryKeyOf(
+        { width: scroll.clientWidth, height: grid.offsetHeight },
+        collapseColumns ? gridTemplateColumns : 'even',
+        isMobile
+      )
+    })
+  }, [isMobile, collapseColumns, gridTemplateColumns, gridRef, scrollRef])
+
+  // 空闲预热其余档位：首访某档时那一次实测被提前到用户看不见的时候（见 `useZoomTierWarmup`）。
+  useZoomTierWarmup({
+    gridRef,
+    scrollRef,
+    zoom,
+    isMobile,
+    columns: collapseColumns ? gridTemplateColumns : 'even',
+  })
+
   const gridStyle = useMemo(
     () =>
       ({
@@ -112,7 +142,7 @@ export default function ScheduleTable({
       {/* 手势层要挪一整个滚动容器（位移写在它自己身上），所以外面必须有一层只负责裁剪的包装：
           被 transform 的后代会计入滚动溢出区域，写在内层网格上会污染 scrollWidth 与边缘判定。
           两层都是 `flex flex-col` + `min-h-0 flex-1`，尺寸分配与改动前等价（见任务基线文件）。 */}
-      <div data-schedule-swipe-stage className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div ref={zoomStageRef} data-schedule-swipe-stage data-schedule-zoom-stage className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div
           ref={scrollRef}
           data-schedule-scroll

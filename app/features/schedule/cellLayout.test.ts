@@ -1,12 +1,21 @@
-import { describe, expect, it, vi } from 'vitest'
-import { createCellLayoutQueue, fitCourseCells } from './cellLayout'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  createCellLayoutQueue,
+  currentCellLayoutGeometry,
+  fitCourseCells,
+  setCellLayoutGeometryReader,
+  setCellLayoutTier,
+  withCellLayoutScope,
+} from './cellLayout'
 import type { CellLayoutJob } from './cellLayout'
+import { clearFitSnapshots, fitSnapshotCount, lookupFitSnapshot, recordFitSnapshot, setCacheGeometry } from './cellLayoutCache'
 import { CELL_FALLBACK_SCALES } from './cellScale'
 
-function cell(id: string, log: string[], overflowUntil = -1, widthOverflow = false) {
+function cell(id: string, log: string[], overflowUntil = -1, widthOverflow = false, contentKey = '') {
   let stage = -1
   let width = 0
   const job: CellLayoutJob = {
+    contentKey,
     prepare: () => log.push(`${id}:prepare`),
     overflows: () => {
       log.push(`${id}:read:${stage}`)
@@ -31,6 +40,36 @@ function cell(id: string, log: string[], overflowUntil = -1, widthOverflow = fal
     widthOverflows: () => widthOverflow && width > 0,
   }
   return job
+}
+
+/**
+ * 读就抛的假课程格作业：`overflows()` / `readUsedWidth()` / `widthOverflows()` 一碰就抛。
+ *
+ * 「命中预计算 ⇒ 零测量」这条契约只能这样钉住：纯写路径里只要混进任何一次读取，测试立刻红。
+ * 它与 `cellLayoutCache.test.ts` 的 `writeOnlyJob` 是同一手法的两个面 —— 那边钉的是**套用**
+ * （`applyCellSnapshot`）不读，这边钉的是**命中**（`fitCourseCells`）不读。
+ *
+ * @param id 日志前缀。
+ * @param contentKey 内容签名（命中缓存的依据）。
+ * @param log 写入日志。
+ */
+function readProofCell(id: string, contentKey: string, log: string[]): CellLayoutJob {
+  return {
+    contentKey,
+    prepare: () => log.push(`${id}:prepare`),
+    overflows: () => {
+      throw new Error('命中预计算时必须零测量，不得读 overflows()')
+    },
+    hideOptional: (index) => log.push(`${id}:hide:${index}`),
+    setScale: (scale) => log.push(`${id}:scale:${scale}`),
+    readUsedWidth: () => {
+      throw new Error('命中预计算时必须零测量，不得读 readUsedWidth()')
+    },
+    setWidth: (width) => log.push(`${id}:width:${width}`),
+    widthOverflows: () => {
+      throw new Error('命中预计算时必须零测量，不得读 widthOverflows()')
+    },
+  }
 }
 
 describe('课程格分阶段批量测量', () => {
@@ -112,5 +151,149 @@ describe('课程格测量队列', () => {
     expect(cancel).toHaveBeenCalledTimes(1)
     frame()
     expect(flush).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('档位排布缓存接入适配路径', () => {
+  beforeEach(() => {
+    clearFitSnapshots()
+    // 两处必须一致：`fitCourseCells` 在批次开头现读几何（见 `setCellLayoutGeometryReader`），
+    // 而测试里手写 `recordFitSnapshot` 的那一条用的是调用时的当前几何（`setCacheGeometry`）。
+    setCellLayoutGeometryReader(() => '379|600|true|false')
+    setCacheGeometry('379|600|true|false')
+  })
+
+  it('命中缓存时按预计算纯写套用，一次测量都不做', () => {
+    const log: string[] = []
+    recordFitSnapshot({ contentKey: 'c1|数学|A203', tier: 2 }, { hidden: 1, scale: 0.9, width: 24 })
+
+    setCellLayoutTier(2)
+
+    // 作业的读取全部会抛：命中路径里只要出现任何一次测量，这个用例就红。
+    expect(() => fitCourseCells([readProofCell('c1', 'c1|数学|A203', log)])).not.toThrow()
+    expect(log).toEqual(['c1:prepare', 'c1:hide:0', 'c1:scale:0.9', 'c1:width:24'])
+  })
+
+  it('首访档位走实测，并把结果回读进缓存：同一签名第二次就命中了', () => {
+    const log: string[] = []
+    setCellLayoutTier(2)
+
+    fitCourseCells([cell('c1', log, 1, false, 'c1|数学|A203')])
+
+    expect(log).toContain('c1:readWidth')
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A203', tier: 2 })).toEqual({ hidden: 2, scale: 1, width: 31 })
+
+    // 第二次换成读就抛的作业：命中即零测量，写下去的还是那套装法。
+    const second: string[] = []
+    expect(() => fitCourseCells([readProofCell('c1', 'c1|数学|A203', second)])).not.toThrow()
+    expect(second).toEqual(['c1:prepare', 'c1:hide:0', 'c1:hide:1', 'c1:width:31'])
+  })
+
+  it('实测结果按当前档位入库，不会串到别的档位', () => {
+    setCellLayoutTier(1.5)
+    fitCourseCells([cell('c1', [], 1, false, 'c1|数学|A203')])
+
+    expect(fitSnapshotCount()).toBe(1)
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A203', tier: 1.5 })).toEqual({ hidden: 2, scale: 1, width: 31 })
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A203', tier: 2 })).toBeUndefined()
+  })
+
+  it('只有未命中的格子走实测，命中的格子一次都不重测', () => {
+    const log: string[] = []
+    recordFitSnapshot({ contentKey: 'hit', tier: 2 }, { hidden: 0, scale: 1, width: 41 })
+
+    setCellLayoutTier(2)
+    fitCourseCells([readProofCell('hit', 'hit', log), cell('miss', log, 0, false, 'miss')])
+
+    // 命中的只写（读会抛，能跑通就说明没读）；未命中的走完整实测。
+    expect(log.filter((line) => line.startsWith('hit:'))).toEqual(['hit:prepare', 'hit:width:41'])
+    expect(log).toContain('miss:read:-1')
+    expect(log).toContain('miss:readWidth')
+    expect(lookupFitSnapshot({ contentKey: 'miss', tier: 2 })).toEqual({ hidden: 1, scale: 1, width: 31 })
+  })
+
+  it('内容签名变了就是另一条：教室改一个字就重新实测', () => {
+    setCellLayoutTier(2)
+    fitCourseCells([cell('c1', [], 0, false, 'c1|数学|A203')])
+    fitCourseCells([cell('c1', [], 2, false, 'c1|数学|A204')])
+
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A203', tier: 2 })).toEqual({ hidden: 1, scale: 1, width: 31 })
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A204', tier: 2 })).toEqual({ hidden: 3, scale: 1, width: 31 })
+    expect(fitSnapshotCount()).toBe(2)
+  })
+
+  it('空签名的作业不可缓存：照常实测，但一条都不入库', () => {
+    const log: string[] = []
+    setCellLayoutTier(2)
+
+    fitCourseCells([cell('c1', log), cell('c2', log)])
+
+    expect(log).toContain('c1:read:-1')
+    expect(fitSnapshotCount()).toBe(0)
+  })
+})
+
+describe('预热作用域切换（离线克隆用）', () => {
+  beforeEach(() => {
+    clearFitSnapshots()
+    setCellLayoutTier(1)
+    setCellLayoutGeometryReader(() => '379|780|even|mobile')
+    setCacheGeometry('379|780|even|mobile')
+  })
+
+  it('作用域里跑实测，结果记在作用域的档位与几何下，而不是真实那套', () => {
+    const log: string[] = []
+
+    withCellLayoutScope({ tier: 2, readGeometry: () => '379|780|even|mobile' }, () => {
+      expect(currentCellLayoutGeometry()).toBe('379|780|even|mobile')
+      fitCourseCells([cell('c1', log, 1, false, 'c1|数学|A203')])
+    })
+
+    // 记录落在「作用域档位 2x」下：这正是真实路径切到 2x 时会去查的那个键。
+    setCacheGeometry('379|780|even|mobile')
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A203', tier: 2 })).toEqual({ hidden: 2, scale: 1, width: 31 })
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A203', tier: 1 })).toBeUndefined()
+  })
+
+  it('作用域里的几何与真实的不同（例如预热宿主盒子对不上）时，条目记在作用域几何下、不会串味', () => {
+    withCellLayoutScope({ tier: 2, readGeometry: () => 'clone|900|even|mobile' }, () => {
+      fitCourseCells([cell('c1', [], 1, false, 'c1|数学|A203')])
+    })
+
+    setCacheGeometry('clone|900|even|mobile')
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A203', tier: 2 })).toBeDefined()
+
+    // 真实几何下查不到 —— 对不上就是「预热白做」，而不是让真实路径拿到一份盒子不对的排布。
+    setCacheGeometry('379|780|even|mobile')
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A203', tier: 2 })).toBeUndefined()
+  })
+
+  it('跑完还原档位：作用域外的下一批仍按外面的档位入库', () => {
+    withCellLayoutScope({ tier: 2, readGeometry: () => '379|780|even|mobile' }, () => {
+      fitCourseCells([cell('c1', [], 1, false, 'c1|数学|A203')])
+    })
+
+    fitCourseCells([cell('c2', [], 1, false, 'c2|数学|A203')])
+
+    expect(lookupFitSnapshot({ contentKey: 'c2|数学|A203', tier: 1 })).toBeDefined()
+    expect(lookupFitSnapshot({ contentKey: 'c2|数学|A203', tier: 2 })).toBeUndefined()
+  })
+
+  it('作用域里抛错也要还原 —— 一次异常不能把预热的几何留在真实路径上', () => {
+    expect(() =>
+      withCellLayoutScope({ tier: 2, readGeometry: () => 'clone|900|even|mobile' }, () => {
+        throw new Error('boom')
+      })
+    ).toThrow('boom')
+
+    expect(currentCellLayoutGeometry()).toBe('379|780|even|mobile')
+
+    fitCourseCells([cell('c1', [], 1, false, 'c1|数学|A203')])
+    setCacheGeometry('379|780|even|mobile')
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A203', tier: 1 })).toBeDefined()
+  })
+
+  it('作用域返回内部返回值', () => {
+    expect(withCellLayoutScope({ tier: 2, readGeometry: () => '' }, () => 'value')).toBe('value')
   })
 })

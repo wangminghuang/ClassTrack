@@ -187,10 +187,58 @@ export const ZOOM_TIERS = [1, 1.5, 2] as const
 export function getDetailLevel(zoom: number): 'compact' | 'standard' | 'full'
 ```
 
-- **缩放只改列宽，不引入任何等比缩放**（不用 CSS `zoom`、不用 `transform: scale`）。
+- **缩放只改列宽**：档位切换本身只改 `--schedule-zoom`（列宽/字号随之推导），**不引入等比缩放** —— 不用 CSS `zoom`，也不用 `transform: scale`。手势期间唯一允许的变形见下节（受控例外）。
 - **字号由格子尺寸推导**（见「课程格尺度体系」）：列变宽 → 字号也涨，但**封顶 15px**。1x→2x 列宽涨 2 倍而字号只涨 1.5 倍，多出来的宽度全部变成「每行更多字 → 更少行 → 腾出的行高容纳教师/备注」。若把上限一起放开，2x 就退化成纯放大镜——这是明确禁止的。
 - 档位（`compact` / `standard` / `full`）仍是离散吸附：`snapZoomTier` 在 <1.35 → `compact`、<1.9 → `standard`、其余 `full`。但**档位不再驱动内容显隐**（2026-09-24 起）：显示到哪一级由下面的「空间自适应」实测决定，档位只作为 `data-zoom-tier` 这类观测锚点保留。
 - 缩放值不持久化，进页面固定 1x：避免用户上次放大后误以为课表只有三天。
+
+### 缩放的两段式：手势期预览 → 落定（2026-10-11 起）
+
+捏合时**不做真实重排**（每次改宽度都会强制整文档布局，实测 202ms 长任务 / 67% 的 CPU 花在
+`overflows()` 的强制布局上）。改为「按住时用合成层变换假装放大，松手后一次性落定」：
+
+```
+idle ──pointerdown/touchstart──> preview ──手势结束──> settling ──过渡结束──> idle
+```
+
+- **preview**：只写 `[data-schedule-zoom-stage]` 上的内联 `transform`，不动网格宽度、不动
+  `--schedule-zoom`、不测任何格子。换算 `translateX(centerX × (1 − k)) scaleX(k)`，
+  `transform-origin: 0 0`。同时给该节点挂 `blur(3px)`（合成的放大本就模糊，主动糊掉比让它
+  露出拉伸的字形更自然）。
+- **settling**：手指抬起后把档位真正落下去 —— `setCellLayoutTier(tier)` → 写 `--schedule-zoom`
+  → 写 `scrollLeft`（`(scrollLeft + centerX) × ratio − centerX`）→ **同一帧清掉变换与模糊**，
+  再淡出模糊（120ms）。前两步的顺序是硬约束：先写 `scrollLeft` 会按旧宽度夹取。
+- 落定读的是**预计算排布**（见下节），命中即零格子测量；静止态必须回到「无内联
+  `transform` / `filter` / `transition`」。
+
+**受控例外（本条覆盖上面「不引入任何等比缩放」的表述）**：变换只允许出现在 `preview` /
+`settling` 两个显式相位、只允许 `scaleX` + `translateX`、只允许挂在 stage 上，且静止态必须被
+清空。禁止项不变：不得用 CSS `zoom`、不得 `transform: scale`、不得把变换挂在网格或滚容器上
+（会污染 `scrollWidth` 与边缘阻尼判定）。`zoomPreview.ts` 是这些常量与换算的单一真源，
+`scheduleSourceGuard.test.ts` 用白名单守住这条边界。
+
+**观测锚点**：stage 上的 `data-schedule-zoom-preview` 取值 `preview` / `settling`，静止态不存在。
+
+### 档位排布预计算（2026-10-11 起）
+
+课程格的盒子尺寸（`hidden` / `scale` / `width` 三件事）是 `(几何, 内容, 档位)` 的纯函数，
+所以每个格子的排布可以提前算好、按这套键缓存（`cellLayoutCache.ts`）：
+
+```
+geometryKey = `${滚容器 clientWidth}|${网格 offsetHeight}|${列模板}|${mobile|desktop}`
+contentKey  = `${课号}|课名|教室|教师|单双周|备注|起始节-结束节`
+slotKey     = geometryKey + 内容 + 档位
+```
+
+- **宽取滚容器、高取网格**这一对是刻意选的：网格高被 12 行地板钳成常量，于是 `geometryKey`
+  **对档位不敏感**，三档共用同一套几何；网格宽随档位变，那部分由档位维度负责。两样都取容器
+  内容盒会让键随水平滚动条在档位间翻转（548 ↔ 533），导致刚算好的档位每次换挡就被丢掉。
+- **列模板传内联 style 的模板字符串**，不要传 `getComputedStyle` 的结果（后者已把档位算成像素值）。
+- **内容改了键就变**，所以不需要「记得清缓存」这类易漏的失效逻辑；换几何也**不清表**，只是查不到。
+- 两个填充来源：真实适配时顺手回读入库；空闲窗口里离屏克隆网格预热**非当前**的档位
+  （`useZoomTierWarmup.ts`，每片 4 格，任何交互立刻取消）。预热矩阵对不上时后果只是「白做」。
+- 格子上 `data-course-key` 就是 `contentKey`；它也是预热枚举格子的锚点（克隆里的格子会去掉
+  `data-course-cell`，以免混进验收脚本的全局查询）。
 
 ## 空间自适应（内容显隐怎么决定）
 
@@ -339,7 +387,10 @@ export function deriveSectionTimes(classes: Class[]): Record<number, SectionTime
 | `data-course-parity` | 单双周徽标 | 1x 可见、桌面端 `display: none`（由 CSS 断点决定，不是「不在 DOM 里」） |
 | `data-course-out-of-week` | 非本周课程块 | 判定「淡化显示非本周课程」是否生效、灰色态是否渲染 |
 | `data-schedule-zoom-control` | 缩放浮层 | 手机端在、桌面端不在 DOM |
-| `data-schedule-swipe-stage` | 滚容器的外层裁剪层 | 定位 stage；确认尺寸分配由「stage + 滚容器」两层承担、数字与改动前一致 |
+| `data-schedule-swipe-stage` / `data-schedule-zoom-stage` | 滚容器的外层裁剪层 | 定位 stage；确认尺寸分配由「stage + 滚容器」两层承担、数字与改动前一致；缩放预览的 `transform` / `filter` 只允许写在这一层 |
+| `data-course-key` | 课程块按钮（= 内容签名） | 排布缓存的内容键锚点；预热靠它枚举克隆里的格子（克隆会去掉 `data-course-cell`） |
+| `data-schedule-zoom-preview` | 同一个 stage | `'preview'` \| `'settling'`；静止态必须不存在（有值就说明有残留的预栅格状态） |
+| `data-schedule-zoom-warmup` | 离屏预热宿主的 div | 预热只在空闲窗口存在，取值是正在预热的档位；断言静止态不存在即可确认预热已收摊 |
 | `data-week-swipe-state` | 滚容器（**命令式写，不在 React 树里**） | `'idle'` \| `'dragging'` \| `'switching'`；开关关闭或未启用时该属性不存在 |
 | `data-current-week` | 顶栏「第 N 周」span | 断言切周是否发生、切到哪一周（不依赖中文文案） |
 
@@ -460,3 +511,10 @@ agent-browser eval "String(document.querySelectorAll('[data-course-cell]').lengt
 - 让课程格在自己的 `useLayoutEffect` 里同步「写 display / 字号 → 读 `scrollHeight`」地适配：翻周时新课程格集中挂载，每次读写都强制整张网格重排。实测松手切周产生 672–824ms 主线程长任务、动画卡住 1.0–1.3s（Chrome 155 / 412×731 / 18 格）。必须走 `cellLayout.ts` 的共享队列，分阶段批量读写。
 - 给课程格测量 effect 留空依赖数组（`}` 后不带 `[...]`）：每次 render 都重建任务并入队，配色 / 出勤角标 / 回调引用变化都会触发全网格重测。依赖只写**内容**（`course.name` / `classroom` / `teacher` / `parityLabel` / `note`）。
 - 在 `ResizeObserver` 回调里不比对尺寸直接入队：`observe()` 会立刻回调一次，与首帧测量重复；回调必须先比较 `contentRect` 宽高，没真变就不入队。
+- 在缩放手势里实时改网格宽度（哪怕节流到每 100ms）：每次改宽都让 `cellLayout` 队列重排全网格，实测捏合 200ms 产生 202ms 长任务、67% 的 CPU 花在 `overflows()` 的强制布局上。手势期只允许 stage 上的 `scaleX` 预览，宽度只在落定那一刻改一次。
+- 把预览用的 `transform` / `filter` 挂在网格或滚容器上（而不是 stage）：网格的 `transform` 会被算进滚动溢出区域，`scrollWidth` 与边缘阻尼判定当场被污染；预览只允许挂在 stage 上，静止态必须清空内联值。
+- 落定时先写 `scrollLeft` 再改 `--schedule-zoom`：会按**旧**宽度夹取滚动位置（2x 下本来就超不出旧宽度，落定后位置全错）。顺序是「档位 → 宽度 → scrollLeft → 清变换」。
+- 用 `getComputedStyle` 的列模板（或容器内容盒高度）做排布缓存的几何键：前者已把档位算成像素值、后者会被水平滚动条在档位间翻来覆去（548 ↔ 533），键随档位翻转的结果是「刚算好的档位每次换挡就被丢掉」。几何键取「滚容器内容宽 × 网格自身高度 × 内联列模板 × 断点」。
+- 用「几何变了就清空快照表」当简化手段：手机的 2x 会因水平滚动条让容器内容盒矮 15px，几何键在档位间来回翻转时会把另一档刚算好的条目整表扔掉。几何键应当进每条条目的键，换几何只是查不到。
+- 在 `ResizeObserver` 回调里把几何「推」给缓存：观察者回调在渲染步骤末尾才跑，必然晚一帧，而落定后的第一批查询就在下一帧 —— 键晚一帧则换挡后第一批查询必然落空。几何要由缓存在批次开头**按需读**。
+- 让离屏预热克隆留在 DOM 里不管：验收脚本按 `[data-course-cell]` 数格子会把克隆一起数进去（18 格变 36 格）。克隆进 DOM 前必须抹掉 `data-course-cell`，并且量完/被打断后立刻卸载宿主。

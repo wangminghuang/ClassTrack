@@ -4,8 +4,8 @@ import type { Class, ClassMark } from '~/lib/types'
 import { cn } from '~/lib/utils'
 import { useScheduleDisplayStore } from '~/store/scheduleDisplayStore'
 import { isAttendanceMarked } from '~/store/utils'
-import { cellLayoutQueue } from './cellLayout'
-import type { CellLayoutJob } from './cellLayout'
+import { cellLayoutQueue, createCellLayoutJob } from './cellLayout'
+import { courseContentKey } from './cellLayoutCache'
 import { CELL_ABSENT_RING_CLASS, CELL_ATTENDED_RING_CLASS, CELL_BADGE_CLASS, CELL_FONT_CLASS, CELL_RING_CLASS } from './cellScale'
 import type { CourseColorTheme } from './courseColor'
 import { getWeekParityLabel } from './utils'
@@ -40,6 +40,22 @@ export default function ScheduleCourseCell({ course, mark, theme, attendanceEnab
   const isAbsent = attendanceMarked && !isAttended
   const note = mark?.note || ''
   const parityLabel = isOutOfWeek ? '非本周' : getWeekParityLabel(course.weeks)
+
+  /**
+   * 内容签名：既是这一格的测量作业在预计算缓存里的键，也是 `data-course-key` 的取值
+   * （浏览器验收脚本按它逐格比对排布）。内容一改签名就变，旧条目永远不会被读到，
+   * 所以缓存侧不需要任何显式失效逻辑（见 `cellLayoutCache.ts` 模块头）。
+   */
+  const contentKey = courseContentKey({
+    id: course.id,
+    name: course.name,
+    classroom: course.classroom,
+    teacher: course.teacher,
+    parity: parityLabel,
+    note,
+    // 节次跨度也在签名里：改了上课节次，文字一个字没变，盒子高度却变了。
+    span: `${course.startSection}-${course.endSection}`,
+  })
   // 出勤痕迹要同时满足「出勤统计已开启」与「用户在课表显示里没关掉它」，且只针对本周课：
   // 非本周课一般没有当周标记，灰色态优先，不再叠加任何出勤痕迹。
   const showAttendance = attendanceEnabled && showAttendanceStatus && !isOutOfWeek
@@ -55,63 +71,14 @@ export default function ScheduleCourseCell({ course, mark, theme, attendanceEnab
   const showAttendedRing = showAttendance && isAttended
 
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const contentRef = useRef<HTMLSpanElement>(null)
-  const blockRef = useRef<HTMLSpanElement>(null)
-  const nameRef = useRef<HTMLSpanElement>(null)
-  const roomRef = useRef<HTMLSpanElement>(null)
-  const parityRef = useRef<HTMLSpanElement>(null)
-  const teacherRef = useRef<HTMLSpanElement>(null)
-  const noteRef = useRef<HTMLSpanElement>(null)
 
   // 内容变更才重建测量任务；配色/出勤角标/回调变化不影响文字盒子。
   useLayoutEffect(() => {
-    const content = contentRef.current
     const button = buttonRef.current
-    const block = blockRef.current
-    if (!content || !button || !block) return
+    if (!button) return
 
-    const name = nameRef.current
-    const room = roomRef.current
-    const parity = parityRef.current
-    const teacher = teacherRef.current
-    const noteElement = noteRef.current
-    const optional = [noteElement, teacher, parity]
-    const job: CellLayoutJob = {
-      prepare: () => {
-        for (const el of optional) {
-          if (el) el.style.display = ''
-        }
-        button.style.removeProperty('--cc-scale')
-        block.style.width = ''
-        // 标签仍由 CSS 决定桌面隐藏；教师/备注有空间时展开。
-        for (const el of [teacher, noteElement]) {
-          if (el) el.style.display = 'block'
-        }
-      },
-      overflows: () => content.scrollHeight > content.clientHeight + 1,
-      hideOptional: (index) => {
-        const el = optional[index]
-        if (el) el.style.display = 'none'
-      },
-      setScale: (scale) => button.style.setProperty('--cc-scale', String(scale)),
-      readUsedWidth: () => {
-        let used = 0
-        for (const el of [parity, name, room, teacher, noteElement]) {
-          if (!el || el.style.display === 'none' || getComputedStyle(el).display === 'none') continue
-          const range = document.createRange()
-          range.selectNodeContents(el)
-          for (const rect of range.getClientRects()) {
-            if (rect.height > 1) used = Math.max(used, rect.width)
-          }
-        }
-        return used
-      },
-      // 必须夹在容器内：(Python) 等 token 不降低 min-content。
-      setWidth: (width) => {
-        block.style.width = width > 0 ? `min(${width}px, 100%)` : ''
-      },
-      widthOverflows: () => block.scrollWidth > block.clientWidth + 1,
-    }
+    const job = createCellLayoutJob(button, contentKey)
+    if (!job) return
     let cancelled = false
     const measure = () => {
       if (!cancelled) cellLayoutQueue.enqueue(job)
@@ -138,13 +105,14 @@ export default function ScheduleCourseCell({ course, mark, theme, attendanceEnab
       document.fonts?.removeEventListener('loadingdone', measure)
       observer.disconnect()
     }
-  }, [course.name, course.classroom, course.teacher, parityLabel, note])
+  }, [contentKey])
 
   return (
     <button
       ref={buttonRef}
       type="button"
       data-course-cell
+      data-course-key={contentKey}
       {...(isOutOfWeek ? { 'data-course-out-of-week': '' } : {})}
       className={cn(
         'group relative flex h-full min-h-0 w-full cursor-pointer flex-col overflow-hidden text-left focus-visible:z-10 focus-visible:outline-none',
@@ -161,29 +129,29 @@ export default function ScheduleCourseCell({ course, mark, theme, attendanceEnab
           否则短内容浮在卡片中间、长内容贴着顶部，同一屏里每格的起始高度都不一样。
           溢出时内容向下溢出并被 `overflow-hidden` 裁掉，顶部始终可见 —— 这正好与 PRD 里
           已确认的已知限制（极端格子允许纵向裁剪）一致。 */}
-      <span ref={contentRef} className="flex min-h-0 flex-1 flex-col items-center justify-start md:items-start">
-        <span ref={blockRef} className="block text-left">
-          <span ref={nameRef} data-course-name className={cn('block break-words font-semibold text-white', CELL_FONT_CLASS.name)}>
+      <span data-course-content className="flex min-h-0 flex-1 flex-col items-center justify-start md:items-start">
+        <span data-course-block className="block text-left">
+          <span data-course-name className={cn('block break-words font-semibold text-white', CELL_FONT_CLASS.name)}>
             {course.name}
           </span>
           {parityLabel && (
             // 自然态即在手机端可见（不再是 `hidden` + JS 打开）：可见性完全交给 CSS 断点，
             // JS 只负责空间不够时把它关掉，判据里因此不再需要视口布尔值。
-            <span ref={parityRef} data-course-parity className={cn('block text-white/70 md:hidden', CELL_FONT_CLASS.room)}>
+            <span data-course-parity className={cn('block text-white/70 md:hidden', CELL_FONT_CLASS.room)}>
               {parityLabel}
             </span>
           )}
           {course.classroom && (
-            <span ref={roomRef} data-course-room className={cn('mt-0.5 block break-words text-white/85', CELL_FONT_CLASS.room)}>
+            <span data-course-room className={cn('mt-0.5 block break-words text-white/85', CELL_FONT_CLASS.room)}>
               {course.classroom}
             </span>
           )}
           {course.teacher && (
-            <span ref={teacherRef} data-course-teacher className={cn('hidden break-all text-white/80', CELL_FONT_CLASS.room)}>
+            <span data-course-teacher className={cn('hidden break-all text-white/80', CELL_FONT_CLASS.room)}>
               {course.teacher}
             </span>
           )}
-          <span ref={noteRef} data-course-note className={cn('hidden break-all text-white/70 md:truncate', CELL_FONT_CLASS.room)}>
+          <span data-course-note className={cn('hidden break-all text-white/70 md:truncate', CELL_FONT_CLASS.room)}>
             {note || (
               <span className="hidden text-white/60 transition-opacity md:inline md:opacity-0 md:group-hover:opacity-100">
                 点击查看详情

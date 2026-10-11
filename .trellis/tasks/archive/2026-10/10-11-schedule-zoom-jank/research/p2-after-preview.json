@@ -1,0 +1,143 @@
+{
+  "cpuRate": 1,
+  "environment": {
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+    "width": 412,
+    "height": 731,
+    "cells": 18,
+    "gridWidth": 379
+  },
+  "touch": [
+    {
+      "plan": "pinch-out-1x→2x",
+      "expectTier": 2,
+      "gesture": {
+        "frames": 81,
+        "maxFrameGap": 16.800000000000182,
+        "p95FrameGap": 16.700000000000273,
+        "longTasks": [],
+        "worstLongTask": 0,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": null,
+        "loafCount": 0,
+        "styleWrites": 2
+      },
+      "afterRelease": {
+        "frames": 33,
+        "maxFrameGap": 49.90000000000009,
+        "p95FrameGap": 33.30000000000018,
+        "longTasks": [
+          71
+        ],
+        "worstLongTask": 71,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": 24.1,
+        "loafCount": 1,
+        "styleWrites": 2
+      },
+      "finalZoomLevel": 2
+    },
+    {
+      "plan": "pinch-in-2x→1x",
+      "expectTier": 1,
+      "gesture": {
+        "frames": 81,
+        "maxFrameGap": 16.800000000000182,
+        "p95FrameGap": 16.700000000000728,
+        "longTasks": [],
+        "worstLongTask": 0,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": null,
+        "loafCount": 0,
+        "styleWrites": 2
+      },
+      "afterRelease": {
+        "frames": 28,
+        "maxFrameGap": 116.80000000000018,
+        "p95FrameGap": 49.900000000000546,
+        "longTasks": [
+          64,
+          127
+        ],
+        "worstLongTask": 127,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": 76.3,
+        "loafCount": 2,
+        "styleWrites": 2
+      },
+      "finalZoomLevel": 1
+    },
+    {
+      "plan": "pinch-out-1x→2x",
+      "expectTier": 2,
+      "gesture": {
+        "frames": 81,
+        "maxFrameGap": 16.800000000000182,
+        "p95FrameGap": 16.700000000000728,
+        "longTasks": [],
+        "worstLongTask": 0,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": null,
+        "loafCount": 0,
+        "styleWrites": 2
+      },
+      "afterRelease": {
+        "frames": 33,
+        "maxFrameGap": 50,
+        "p95FrameGap": 33.399999999999636,
+        "longTasks": [
+          55
+        ],
+        "worstLongTask": 55,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": 10,
+        "loafCount": 1,
+        "styleWrites": 2
+      },
+      "finalZoomLevel": 2
+    },
+    {
+      "plan": "pinch-in-2x→1x",
+      "expectTier": 1,
+      "gesture": {
+        "frames": 81,
+        "maxFrameGap": 16.800000000000182,
+        "p95FrameGap": 16.700000000000728,
+        "longTasks": [],
+        "worstLongTask": 0,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": null,
+        "loafCount": 0,
+        "styleWrites": 2
+      },
+      "afterRelease": {
+        "frames": 26,
+        "maxFrameGap": 166.70000000000073,
+        "p95FrameGap": 33.29999999999927,
+        "longTasks": [
+          59,
+          154
+        ],
+        "worstLongTask": 154,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": 102.7,
+        "loafCount": 2,
+        "styleWrites": 2
+      },
+      "finalZoomLevel": 1
+    }
+  ],
+  "sweep": [],
+  "control": [],
+  "preview": [],
+  "summary": {
+    "touchWorstFrameGap": 16.800000000000182,
+    "touchWorstLongTask": 0,
+    "touchStyleWrites": 8,
+    "sweepWorstFrameGap": 0,
+    "sweepWorstLongTask": 0,
+    "sweepStyleWrites": 0,
+    "control": [],
+    "preview": []
+  }
+}

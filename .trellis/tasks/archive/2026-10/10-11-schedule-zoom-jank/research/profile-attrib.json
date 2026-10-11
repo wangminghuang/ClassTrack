@@ -1,0 +1,98 @@
+{
+  "totalMs": 3088.63,
+  "totalSamples": 2648,
+  "topFunctions": [
+    {
+      "key": "overflows @ schedule-AWnxcSQN.js:2",
+      "self": 1783,
+      "selfMs": 2079.69
+    },
+    {
+      "key": "(idle) @ :0",
+      "self": 595,
+      "selfMs": 694.01
+    },
+    {
+      "key": "(program) @ :0",
+      "self": 195,
+      "selfMs": 227.45
+    },
+    {
+      "key": "(garbage collector) @ :0",
+      "self": 20,
+      "selfMs": 23.33
+    },
+    {
+      "key": "(anonymous) @ :1",
+      "self": 18,
+      "selfMs": 21
+    },
+    {
+      "key": "readUsedWidth @ schedule-AWnxcSQN.js:2",
+      "self": 8,
+      "selfMs": 9.33
+    },
+    {
+      "key": "getClientRects @ :0",
+      "self": 7,
+      "selfMs": 8.16
+    },
+    {
+      "key": "prepare @ schedule-AWnxcSQN.js:2",
+      "self": 6,
+      "selfMs": 7
+    },
+    {
+      "key": "(anonymous) @ schedule-AWnxcSQN.js:2",
+      "self": 4,
+      "selfMs": 4.67
+    },
+    {
+      "key": "(anonymous) @ :0",
+      "self": 3,
+      "selfMs": 3.5
+    },
+    {
+      "key": "setProperty @ :0",
+      "self": 3,
+      "selfMs": 3.5
+    },
+    {
+      "key": "tick @ :8",
+      "self": 2,
+      "selfMs": 2.33
+    },
+    {
+      "key": "ir @ schedule-AWnxcSQN.js:2",
+      "self": 1,
+      "selfMs": 1.17
+    },
+    {
+      "key": "getComputedStyle @ :0",
+      "self": 1,
+      "selfMs": 1.17
+    },
+    {
+      "key": "hideOptional @ schedule-AWnxcSQN.js:2",
+      "self": 1,
+      "selfMs": 1.17
+    },
+    {
+      "key": "requestAnimationFrame @ :0",
+      "self": 1,
+      "selfMs": 1.17
+    }
+  ],
+  "topModules": [
+    {
+      "module": "schedule-AWnxcSQN.js",
+      "selfMs": 2103.02,
+      "percent": 68.09
+    },
+    {
+      "module": "(none)",
+      "selfMs": 985.61,
+      "percent": 31.91
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "report": [
+    {
+      "label": "双指捏合 1x→1.5x（需播回档位）",
+      "tier": 1.5,
+      "gridWidth": 568.5,
+      "containerWidth": 379,
+      "scrollLeft": 99,
+      "zoomTier": "standard",
+      "problems": []
+    },
+    {
+      "label": "双指捏合 1x→2x（无需播回）",
+      "tier": 2,
+      "gridWidth": 758,
+      "containerWidth": 379,
+      "scrollLeft": 198,
+      "zoomTier": "full",
+      "problems": []
+    },
+    {
+      "label": "双指捏合（真实触摸）1x→2x",
+      "tier": 2,
+      "gridWidth": 758,
+      "containerWidth": 379,
+      "scrollLeft": 198,
+      "zoomTier": "full",
+      "problems": []
+    },
+    {
+      "label": "+ 按钮 1x→1.5x",
+      "tier": 1.5,
+      "gridWidth": 568.5,
+      "containerWidth": 379,
+      "scrollLeft": 99,
+      "zoomTier": "standard",
+      "problems": []
+    },
+    {
+      "label": "+ 按钮 1.5x→2x",
+      "tier": 2,
+      "gridWidth": 758,
+      "containerWidth": 379,
+      "scrollLeft": 198,
+      "zoomTier": "full",
+      "problems": []
+    },
+    {
+      "label": "− 按钮 2x→1.5x",
+      "tier": 1.5,
+      "gridWidth": 568.5,
+      "containerWidth": 379,
+      "scrollLeft": 99,
+      "zoomTier": "standard",
+      "problems": []
+    },
+    {
+      "label": "− 按钮 1.5x→1x",
+      "tier": 1,
+      "gridWidth": 379,
+      "containerWidth": 379,
+      "scrollLeft": 0,
+      "zoomTier": "compact",
+      "problems": []
+    },
+    {
+      "label": "双击 1x→2x",
+      "tier": 2,
+      "gridWidth": 758,
+      "containerWidth": 379,
+      "scrollLeft": 198,
+      "zoomTier": "full",
+      "problems": []
+    },
+    {
+      "label": "双击 2x→1x",
+      "tier": 1,
+      "gridWidth": 379,
+      "containerWidth": 379,
+      "scrollLeft": 0,
+      "zoomTier": "compact",
+      "problems": []
+    },
+    {
+      "label": "reduce 双指捏合 1x→1.5x",
+      "tier": 1.5,
+      "gridWidth": 568.5,
+      "containerWidth": 379,
+      "scrollLeft": 99,
+      "zoomTier": "standard",
+      "problems": []
+    },
+    {
+      "label": "reduce + 按钮 1x→1.5x",
+      "tier": 1.5,
+      "gridWidth": 568.5,
+      "containerWidth": 379,
+      "scrollLeft": 99,
+      "zoomTier": "standard",
+      "problems": []
+    },
+    {
+      "label": "reduce 双击 1x→2x",
+      "tier": 2,
+      "gridWidth": 758,
+      "containerWidth": 379,
+      "scrollLeft": 198,
+      "zoomTier": "full",
+      "problems": []
+    }
+  ]
+}

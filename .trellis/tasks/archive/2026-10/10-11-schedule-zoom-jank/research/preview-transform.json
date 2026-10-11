@@ -1,0 +1,76 @@
+{
+  "cpuRate": 1,
+  "environment": {
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+    "width": 412,
+    "height": 731,
+    "cells": 18,
+    "gridWidth": 379
+  },
+  "touch": [],
+  "sweep": [],
+  "control": [],
+  "preview": [
+    {
+      "blurRadius": 0,
+      "span": "1x→2x",
+      "mounted": {
+        "width": 379,
+        "cells": 18
+      },
+      "window": {
+        "frames": 84,
+        "maxFrameGap": 16.800000000000182,
+        "p95FrameGap": 16.799999999999955,
+        "longTasks": [],
+        "worstLongTask": 0,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": null,
+        "loafCount": 0,
+        "styleWrites": 0
+      }
+    },
+    {
+      "blurRadius": 3,
+      "span": "1x→2x",
+      "mounted": {
+        "width": 379,
+        "cells": 18
+      },
+      "window": {
+        "frames": 84,
+        "maxFrameGap": 16.800000000000182,
+        "p95FrameGap": 16.700000000000273,
+        "longTasks": [],
+        "worstLongTask": 0,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": null,
+        "loafCount": 0,
+        "styleWrites": 0
+      }
+    }
+  ],
+  "summary": {
+    "touchWorstFrameGap": 0,
+    "touchWorstLongTask": 0,
+    "touchStyleWrites": 0,
+    "sweepWorstFrameGap": 0,
+    "sweepWorstLongTask": 0,
+    "sweepStyleWrites": 0,
+    "control": [],
+    "preview": [
+      {
+        "blurRadius": 0,
+        "maxFrameGap": 16.800000000000182,
+        "worstLongTask": 0,
+        "frames": 84
+      },
+      {
+        "blurRadius": 3,
+        "maxFrameGap": 16.800000000000182,
+        "worstLongTask": 0,
+        "frames": 84
+      }
+    ]
+  }
+}

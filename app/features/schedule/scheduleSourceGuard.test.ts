@@ -119,3 +119,112 @@ describe('schedule 目录源码守卫', () => {
     expect(table).toContain('grid-rows-[2.25rem_repeat(12,minmax(3.875rem,1fr))]')
   })
 })
+
+/**
+ * 回归守卫（任务 `10-11-schedule-zoom-jank`）：缩放的预览变换是**受控例外**。
+ *
+ * 规范（`mobile-schedule-layout.md`「缩放的两段式」）允许在 `preview` / `settling` 两个相位里、
+ * 在 stage 上写 `scaleX` + `translateX` 与一层模糊；除此之外：
+ * - 静止态必须无内联 `transform` / `filter` / `transition`；
+ * - 变换只许挂在 stage，不许挂在网格或滚容器（网格上的 transform 会计入滚动溢出区域，
+ *   污染 `scrollWidth` 与边缘阻尼判定）；
+ * - 模糊半径、时长这些数值只许有 `zoomPreview.ts` 一份真源。
+ *
+ * 这些断言都是真机上真实发生过或险些发生的回归，不是洁癖。
+ */
+describe('缩放预览的受控例外边界', () => {
+  /** 允许写内联 `transform` / `filter` 的文件：缩放预览（stage）与横滑跟手（滚容器）。 */
+  const TRANSFORM_WRITERS = ['hooks/useScheduleZoom.ts', 'hooks/useWeekSwipeGesture.ts']
+
+  function relative(file: string): string {
+    return file.slice(SCHEDULE_DIR.length).replace(/^\//, '')
+  }
+
+  it('只有白名单文件写内联 transform / filter', () => {
+    const offenders: string[] = []
+    const writePattern = /\.style\.(transform|filter)\b|\.style\.removeProperty\(['"](transform|filter)['"]\)/
+
+    for (const file of FILES) {
+      if (TRANSFORM_WRITERS.includes(relative(file))) continue
+      for (const line of codeLines(readFileSync(file, 'utf8'))) {
+        if (writePattern.test(line)) offenders.push(`${relative(file)}: ${line.trim()}`)
+      }
+    }
+
+    expect(offenders).toEqual([])
+  })
+
+  it('白名单本身没写错（两个文件都确实在，且都在写）', () => {
+    for (const name of TRANSFORM_WRITERS) {
+      const file = join(SCHEDULE_DIR, name)
+      expect(FILES).toContain(file)
+      expect(readFileSync(file, 'utf8')).toMatch(/\.style\.(transform|filter)/)
+    }
+  })
+
+  it('缩放预览的每一次变换写入都以 stage 为目标', () => {
+    const hook = codeLines(readFileSync(join(SCHEDULE_DIR, 'hooks/useScheduleZoom.ts'), 'utf8'))
+    const writes = hook.filter((line) => /\.style\.(transform|filter)\b/.test(line))
+
+    expect(writes.length).toBeGreaterThan(0)
+    for (const line of writes) {
+      // 目标变量必须就是 `stage`（= `zoomStageRef.current`），不许是网格/滚容器/格子。
+      expect(line).toContain('stage.style.')
+    }
+  })
+
+  it('缩放预览不碰网格与滚容器的内联样式', () => {
+    const hook = readFileSync(join(SCHEDULE_DIR, 'hooks/useScheduleZoom.ts'), 'utf8')
+
+    expect(hook).not.toMatch(/gridRef\.current\.style/)
+    expect(hook).not.toMatch(/scrollRef\.current\.style\.(transform|filter)/)
+    // 表组件里一律不许出现内联变换（stage 的 ref 也在这里，写它必须走 hook）。
+    expect(readFileSync(join(SCHEDULE_DIR, 'ScheduleTable.tsx'), 'utf8')).not.toContain('.style.transform')
+  })
+
+  it('不使用 CSS zoom，也不用 transform: scale', () => {
+    const offenders: string[] = []
+
+    for (const file of FILES) {
+      for (const line of codeLines(readFileSync(file, 'utf8'))) {
+        if (/zoom:\s*\d/.test(line)) offenders.push(`${relative(file)}: ${line.trim()}`)
+        if (/transform:\s*scale[^X]/.test(line)) offenders.push(`${relative(file)}: ${line.trim()}`)
+        if (/(^|[\s'"])scale-\d/.test(line)) offenders.push(`${relative(file)}: ${line.trim()}`)
+      }
+    }
+
+    expect(offenders).toEqual([])
+  })
+
+  it('预览模糊半径只许有 zoomPreview.ts 一份真源', () => {
+    const offenders: string[] = []
+
+    for (const file of FILES) {
+      if (relative(file) === 'zoomPreview.ts') continue
+      for (const line of codeLines(readFileSync(file, 'utf8'))) {
+        if (/blur\(\s*\d/.test(line)) offenders.push(`${relative(file)}: ${line.trim()}`)
+      }
+    }
+
+    expect(offenders).toEqual([])
+  })
+
+  it('过渡时长不许写数值字面量（必须引常量）', () => {
+    const hook = codeLines(readFileSync(join(SCHEDULE_DIR, 'hooks/useScheduleZoom.ts'), 'utf8'))
+    const literalMs = hook.filter((line) => /\.style\.transition = `[^`]*\d+ms/.test(line))
+
+    expect(literalMs).toEqual([])
+    expect(readFileSync(join(SCHEDULE_DIR, 'hooks/useScheduleZoom.ts'), 'utf8')).toContain("from '../zoomPreview'")
+  })
+
+  it('stage 节点同时带裁剪层与缩放预览两个锚点', () => {
+    const table = readFileSync(join(SCHEDULE_DIR, 'ScheduleTable.tsx'), 'utf8')
+    const stageAt = table.indexOf('data-schedule-zoom-stage')
+
+    expect(stageAt).toBeGreaterThan(-1)
+    // 变换挂在这一层，正是靠 `overflow-hidden` 把预览多出来的部分裁掉（否则会撑出横向滚动）。
+    expect(table).toContain('data-schedule-swipe-stage data-schedule-zoom-stage')
+    expect(table.slice(stageAt, stageAt + 200)).toContain('overflow-hidden')
+    expect(table).toContain('ref={zoomStageRef}')
+  })
+})

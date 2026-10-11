@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 29
-- **Last Active**: 2026-10-08
+- **Total Sessions**: 30
+- **Last Active**: 2026-10-11
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1006 | Active |
+| `journal-1.md` | ~1056 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 30 | 2026-10-11 | 手机课表缩放两段式：手势期合成层预览 + 档位排布预计算与空闲预热 | `fc0df30`, `55e0b06`, `981e93d`, `b761e8d`, `0afb297`, `3c1e3ac`, `61a3c13`, `146aa5b` | `fix/schedule-zoom-jank` |
 | 29 | 2026-10-08 | 课程配色选择与前台更新检查 | `41edcfc`, `ccb24fb` | `feat/course-palette-and-update-check` |
 | 28 | 2026-10-08 | 回退课程顺序配色并修复颜色碰撞 | `abee4b0` | `fix/schedule-color-allocation` |
 | 26 | 2026-09-29 | 修复旧 WebView 上课表无法上下滑动（html/body 高度兜底被构建删除）+ 预防性加固 | `904111f`, `280c1bf` | `fix/schedule-scroll-legacy-webview` |

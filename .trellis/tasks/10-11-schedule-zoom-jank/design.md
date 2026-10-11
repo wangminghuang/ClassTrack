@@ -123,17 +123,27 @@ export type CellFitSnapshot = {
 ### 6.2 键：把正确性交给键，而不是交给失效逻辑
 
 ```
-geometryKey  = `${containerWidth}|${containerHeight}|${isMobile}|${collapseColumns}`
-contentKey   = `${course.id}|${name}|${classroom}|${teacher}|${parityLabel}|${note}`
-tierKey      = String(tier)   // '1' | '1.5' | '2'
+geometryKey  = `${containerClientWidth}|${containerClientHeight}|${columns}|${isMobile ? 'mobile' : 'desktop'}`
+contentKey   = `${course.id}|${name}|${classroom}|${teacher}|${parityLabel}|${note}|${startSection}-${endSection}`
+slotKey      = `${geometryKey}${KEY_SEPARATOR}${contentKey}${KEY_SEPARATOR}${tier}`  // KEY_SEPARATOR = String.fromCharCode(0)
 ```
 
-- 课程格的盒子尺寸是 `(geometryKey, tierKey)` 的纯函数 ⇒ 快照对该键有效。
+- 课程格的盒子尺寸是 `(geometryKey, tier)` 的纯函数 ⇒ 快照对该键有效。
 - 快照内容是 `(contentKey, 盒子尺寸)` 的纯函数 ⇒ 键里带上内容签名后，
   **内容一改键就变，旧条目永远不会被读到**，不需要「内容变更时记得清缓存」这类易漏的失效逻辑。
-- `geometryKey` 变化时整表丢弃（旋屏 / 窗口变化 / 列折叠开关切换 / 断点跨越）。
-- 条目上限 `CACHE_MAX_ENTRIES = 128`（18 格 × 3 档 = 54，留一倍余量），超出按插入序淘汰。
-
+- **节次跨度必须进内容签名**：同一门课改节次时课名/教室/教师都没变，而盒子高度变了；
+  不进签名就会读到按旧高度算的排布（文字被裁）。
+- **档位不进几何键**（它是独立维度，独立成 `slotKey` 的第三段）；**课程格宽度也不进几何键**
+  —— 它是档位的函数，档位已经进键了。
+- **换几何不清表**（实现期修正，见 `research/README.md` §9.2）：几何键进每条条目的键，换几何只是查不到，
+  靠 LRU 淘汰。初版「`geometryKey` 变化时整表丢弃」在手机上会变成恶性循环：2x 出现水平滚动条后容器
+  内容盒矮 15px，几何键在 1x（高）与 2x（矮）之间来回翻转，于是每次换档先把另一档刚算好的条目扔掉。
+- 条目上限 `CACHE_MAX_ENTRIES = 256`（三套几何 × 18 格 × 3 档 = 108，留一倍余量），超出按插入序淘汰。
+- 几何必须**按需读**而不是推送（实现期修正，见 `research/README.md` §9.1）：`ResizeObserver` 回调
+  固定晚一帧，而落定后第一批查询就在下一帧，推送的键永远是上一档的。改为
+  `setCellLayoutGeometryReader(() => …)` + `currentCellLayoutGeometry()`，在 `fitCourseCells` 批次
+  开头读一次（此时落定宽度已写好，一次读取连滚动条状态一起算进布局）。
+- `contentKey === ''` 表示**不可缓存**（夹具/结构不完整的格），永远走实测、永不入库。
 ### 6.3 两个填充来源
 
 1. **真实适配时顺手记录**（零额外成本）：`fitCourseCells` 跑完一批后，对每个 job 读回快照
@@ -160,10 +170,10 @@ tierKey      = String(tier)   // '1' | '1.5' | '2'
 | `zoomPreview.ts`（新） | **纯函数核**：比例→`tx` 换算、档位比、过渡时长/缓动常量、`prefers-reduced-motion` 判定、落定写入计划 |
 | `zoomPreview.test.ts`（新） | 钉住常量、换算、降级与三条入口的等价性 |
 | `cellLayoutCache.ts`（新） | 快照类型、缓存读写、`geometryKey`、`resolveTierApply()`（纯函数：快照表 → 逐格写入计划） |
-| `cellLayoutCache.test.ts`（新） | 钉住「命中即零读取」、键的构成、淘汰与 `geometryKey` 失效 |
+| `cellLayoutCache.test.ts`（新） | 钉住「命中即零读取」、键的构成（几何 × 内容 × 档位）、LRU 淘汰、换几何**不**串味 |
 | `cellLayout.ts`（改） | 抽出 `createCellLayoutJob(button)`（组件与预热共用）、加挂起闸门、批次跑完回读快照 |
 | `ScheduleCourseCell.tsx`（改） | 改用抽出的 job 构造器；补 `data-course-key`（内容签名，作为缓存键与断言锚点） |
-| `ScheduleTable.tsx`（改） | stage 上补 `data-schedule-zoom-stage`；把容器尺寸/断点/列折叠送达缓存与预热 |
+| `ScheduleTable.tsx`（改） | stage 上补 `data-schedule-zoom-stage`；把几何**读取器**（滚容器内容盒 × 列模板 × 断点）注册给缓存 |
 | `useScheduleZoom.ts`（改） | 状态机、手势 → 预览、按钮/双击 → 过渡、统一落定 |
 | `hooks/useZoomTierWarmup.ts`（新） | 空闲预热与取消 |
 

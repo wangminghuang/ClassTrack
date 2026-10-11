@@ -1,8 +1,17 @@
+import { recordFitSnapshot, resolveTierApply, setCacheGeometry } from './cellLayoutCache'
 import type { CellFitSnapshot } from './cellLayoutCache'
 import { CELL_FALLBACK_SCALES } from './cellScale'
+import { ZOOM_MIN } from './constants'
 
 /** DOM 读写分开，确保多个格子共享同一次布局，而不是逐格强制整张网格重排。 */
 export type CellLayoutJob = {
+  /**
+   * 内容签名（课程号 + 课名 / 教室 / 教师 / 单双周 / 备注）。
+   *
+   * 它既是预计算缓存的键，也是实测结果回写入库的键。空串表示**不可缓存**（结构不完整的夹具、
+   * 测试用的假作业）：这类作业永远走实测路径，也永远不入库。
+   */
+  contentKey: string
   prepare: () => void
   overflows: () => boolean
   hideOptional: (index: number) => void
@@ -23,9 +32,10 @@ export type CellLayoutJob = {
  * 因此克隆只需要照抄 HTML 结构，不需要在 React 侧再传一遍 ref。
  *
  * @param button 课程格按钮（真实格子或离屏克隆里的同构节点）。
+ * @param contentKey 内容签名（见 {@link CellLayoutJob.contentKey}）；空串表示这批格子不可缓存。
  * @returns 读写作业；缺少内容容器或文字块时返回 `null`（结构不对，宁可不测）。
  */
-export function createCellLayoutJob(button: HTMLElement): CellLayoutJob | null {
+export function createCellLayoutJob(button: HTMLElement, contentKey: string): CellLayoutJob | null {
   const content = button.querySelector<HTMLElement>('[data-course-content]')
   const block = button.querySelector<HTMLElement>('[data-course-block]')
   if (!content || !block) return null
@@ -38,6 +48,7 @@ export function createCellLayoutJob(button: HTMLElement): CellLayoutJob | null {
   const optional = [note, teacher, parity]
 
   return {
+    contentKey,
     prepare: () => {
       for (const el of optional) {
         if (el) el.style.display = ''
@@ -103,29 +114,164 @@ export function applyCellSnapshot(job: CellLayoutJob, snapshot: CellFitSnapshot)
   job.setWidth(snapshot.width)
 }
 
+/** 可整行丢弃的可选字段数量：备注 → 教师 → 单双周标签（与作业里的 `optional` 顺序一一对应）。 */
+const OPTIONAL_ROW_COUNT = 3
+
 /**
- * 批量执行既有适配规则：备注 → 教师 → 标签 → 字号兜底 → 文字块收窄。
- * 每个阶段先读完再写，下一阶段才触发布局；轮数不随课程格数量增长。
- * @param jobs 本轮需要重新适配的课程格。
+ * 当前已提交档位。
+ *
+ * 滑块式的「当前值」放在这里而不是缓存模块里：缓存保持纯函数（档位由调用方显式传入），
+ * 而这里是所有「DOM 世界状态」的归口 —— 挂起标记、队列、当前档位都在同一个模块里，
+ * 收尾时一眼能看完。
  */
-export function fitCourseCells(jobs: CellLayoutJob[]): void {
+let currentTier: number = ZOOM_MIN
+
+/**
+ * 声明已提交档位。
+ *
+ * 必须在**改宽度那一次提交里**调用（见 `useScheduleZoom` 的落定序列）：排布批次要等到本帧末
+ * 的 `ResizeObserver` 回声才跑起来，而那时队列需要知道「这批格子属于哪个档位」才能命中缓存。
+ *
+ * @param tier 已提交档位（`ZOOM_TIERS` 之一）。
+ */
+export function setCellLayoutTier(tier: number): void {
+  currentTier = tier
+}
+
+/**
+ * 几何读取器：由 `ScheduleTable` 注册（只有它知道滚容器、列模板与断点，见 `geometryKeyOf`）。
+ *
+ * 之所以是「按需读」而不是「变化时推」：推送必然晚一帧 —— `ResizeObserver` 的回调在渲染步骤的
+ * 最后才跑，而落定那一帧的排布批次恰好紧接着就要用这个键。实测口径是「四轮捏合里有三轮仍在
+ * 实测」：键晚一帧 ⇒ 换档后第一批查询必然落空 ⇒ 刚量过的档位白量。按需读则总是读到当时 DOM
+ * 的真实状态（读之前落定的宽度已经写下去了，布局连滚动条状态一起算）。
+ */
+let readGeometry: (() => string) | null = null
+
+/**
+ * 注册几何读取器。
+ *
+ * @param read 返回当前几何键（见 `geometryKeyOf`）。
+ */
+export function setCellLayoutGeometryReader(read: () => string): void {
+  readGeometry = read
+}
+
+/**
+ * 读一次当前几何键。
+ *
+ * @returns 几何键；未注册时返回空串（此时任何几何都算同一套，缓存退化为不做几何隔离）。
+ */
+export function currentCellLayoutGeometry(): string {
+  return readGeometry?.() ?? ''
+}
+
+/**
+ * 逐个读一遍格子，返回谓词为真的下标。
+ *
+ * 用它而不是 `jobs.filter()`，是为了让「读阶段」保持「一次读完、读之间不插写入」的形状 ——
+ * 谓词里的读取（`overflows()` / `widthOverflows()`）一旦与写入交错，每格都会强制一次整表布局。
+ *
+ * @param jobs 这一批格子。
+ * @param predicate 读判据，第二个参数是下标。
+ * @returns 为真的下标，按传入顺序。
+ */
+function indicesWhere(jobs: readonly CellLayoutJob[], predicate: (job: CellLayoutJob, index: number) => boolean): number[] {
+  const result: number[] = []
+
+  jobs.forEach((job, index) => {
+    if (predicate(job, index)) result.push(index)
+  })
+
+  return result
+}
+
+/**
+ * 实测适配一批课程格，并把结果回读进预计算缓存。
+ *
+ * 既有适配规则：备注 → 教师 → 标签 → 字号兜底 → 文字块收窄。每个阶段先读完再写，下一阶段才
+ * 触发布局；轮数不随课程格数量增长。收尾顺带把每格的最终写法（丢了几行 / 兜底到哪一档 /
+ * 文字块多宽）记成快照 —— 这是缓存的第一填充来源，零额外成本，任何一次真实适配都会让它
+ * 自己所在档位的条目变热。
+ *
+ * @param jobs 这批要走实测的课程格。
+ * @param tier 这批格子所处的档位（快照按它入库）。
+ */
+function measureCourseCells(jobs: readonly CellLayoutJob[], tier: number): void {
   jobs.forEach((job) => job.prepare())
-  let overflowing = jobs.filter((job) => job.overflows())
-  for (let index = 0; index < 3 && overflowing.length > 0; index += 1) {
-    overflowing.forEach((job) => job.hideOptional(index))
-    overflowing = overflowing.filter((job) => job.overflows())
+
+  const hidden = jobs.map(() => 0)
+  const scales = jobs.map(() => 1)
+  let overflowing = indicesWhere(jobs, (job) => job.overflows())
+
+  for (let round = 0; round < OPTIONAL_ROW_COUNT && overflowing.length > 0; round += 1) {
+    overflowing.forEach((index) => jobs[index].hideOptional(round))
+    overflowing.forEach((index) => {
+      hidden[index] = round + 1
+    })
+    overflowing = overflowing.filter((index) => jobs[index].overflows())
   }
+
   for (const scale of CELL_FALLBACK_SCALES) {
     if (overflowing.length === 0) break
-    overflowing.forEach((job) => job.setScale(scale))
-    overflowing = overflowing.filter((job) => job.overflows())
+    overflowing.forEach((index) => jobs[index].setScale(scale))
+    overflowing.forEach((index) => {
+      scales[index] = scale
+    })
+    overflowing = overflowing.filter((index) => jobs[index].overflows())
   }
+
   const widths = jobs.map((job) => Math.ceil(job.readUsedWidth()))
   jobs.forEach((job, index) => {
     if (widths[index] > 0) job.setWidth(widths[index])
   })
-  const restore = jobs.filter((job, index) => widths[index] > 0 && (job.overflows() || job.widthOverflows()))
-  restore.forEach((job) => job.setWidth(0))
+
+  const restore = indicesWhere(jobs, (job, index) => widths[index] > 0 && (job.overflows() || job.widthOverflows()))
+  restore.forEach((index) => jobs[index].setWidth(0))
+
+  const restored = new Set(restore)
+  jobs.forEach((job, index) => {
+    if (job.contentKey === '') return
+
+    const width = widths[index] > 0 && !restored.has(index) ? widths[index] : 0
+    recordFitSnapshot({ contentKey: job.contentKey, tier }, { hidden: hidden[index], scale: scales[index], width })
+  })
+}
+
+/**
+ * 批量适配一批课程格：命中预计算的纯写套用，没命中的回退到实测。
+ *
+ * 这是「零测量换档」的主路径。命中时**一次格子测量都不做**（套用路径只写 `display` /
+ * `--cc-scale` / 文字块宽度）；只要有格子没命中，就只对它走实测 —— 宁可慢一次，
+ * 也绝不显示一份没算过的排布（R7 的回退）。
+ *
+ * 批次开头读一次几何（见 `setCellLayoutGeometryReader`）：读一次就把整批的键定下来，
+ * 既保证「套用」与「回写」用的是同一套几何，也不至于在套用路径里每格读一次、每格强制一次布局。
+ * 这一次容器级读取是本函数唯一的非格子读取，且通常落在一帧里布局已经干净的时候（不额外强制布局）。
+ *
+ * @param jobs 本轮需要重新适配的课程格。
+ */
+export function fitCourseCells(jobs: CellLayoutJob[]): void {
+  if (jobs.length === 0) return
+
+  // 几何必须在这里现读：`ResizeObserver` 推送的版本要晚一帧，而落定后的第一批查询就在下一帧。
+  // 读之前落定的宽度已经写下去了，布局（含滚动条状态）因此是这一档的真实几何。
+  setCacheGeometry(currentCellLayoutGeometry())
+
+  const plan = resolveTierApply(
+    jobs.map((job) => ({
+      contentKey: job.contentKey,
+      apply: (snapshot: CellFitSnapshot) => applyCellSnapshot(job, snapshot),
+    })),
+    currentTier
+  )
+
+  if (plan.missing.length === 0) return
+
+  measureCourseCells(
+    plan.missing.map((index) => jobs[index]),
+    currentTier
+  )
 }
 
 /**

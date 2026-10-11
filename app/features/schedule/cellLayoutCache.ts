@@ -8,13 +8,17 @@
  *
  * **正确性交给键，而不是交给失效逻辑**：
  *
- * - `geometryKey` = 容器宽高 × 断点 × 列折叠开关 —— 课程格的盒子尺寸是它的纯函数；
- * - `contentKey`  = 课程号 + 课名 / 教室 / 教师 / 单双周 / 备注 —— 适配结果是它的纯函数；
+ * - `geometryKey` = 容器宽高 × 列模板 × 断点 —— 课程格的盒子尺寸是它的纯函数；
+ * - `contentKey`  = 课程号 + 课名 / 教室 / 教师 / 单双周 / 备注 + 节次跨度 —— 适配结果是它的纯函数；
  * - `tierKey`     = 档位。
  *
- * 三个键任一不同就是另一个条目。因此「内容改了却忘了清缓存」这类漏法在结构上不可能发生：
- * 内容一改 `contentKey` 就变，旧条目永远不会被读到，只剩内存回收问题
- * （由 `geometryKey` 变更整表丢弃 + 条目上限兜底）。
+ * 三个键任一不同就是另一个条目：内容一改 `contentKey` 就变、几何一改 `geometryKey` 就变，
+ * 旧条目永远不会被读到，于是「改了东西却忘了清缓存」这类漏法在结构上不可能发生。
+ *
+ * 反过来说，**换几何时也不需要清表** —— 老条目只是查不到而已。这一点是量出来的必需品：
+ * 手机上 2x 档出现水平滚动条会让容器内容盒矮 15px，几何键在 1x 与 1.5x/2x 之间来回翻转，
+ * 若「键变即清表」，每次换档都会先把刚算好的另一档成果扔掉，缓存等于不存在（见 `geometry` 的说明）。
+ * 内存回收只由条目上限的 LRU 淘汰兜底。
  *
  * 本模块不碰 DOM，可在 vitest 的 node 环境里直接单测。
  */
@@ -38,10 +42,11 @@ export type CellFitSnapshot = {
 /**
  * 条目上限。
  *
- * 实际规模是「可见课程格数 × 档位数」：手机 1x 下一屏 18 格 × 3 档 = 54，留一倍余量。
+ * 规模 = 几何套数 × 可见课程格数 × 档位数：手机上「无水平滚动条（1x）」与「有水平滚动条
+ * （1.5x / 2x）」本就是两套几何，2 × 18 × 3 = 108；桌面同理。取 256 留一倍余量。
  * 超出后按**插入序**淘汰最早写入的一条（重复写入同一键会把它移到最新）。
  */
-export const CACHE_MAX_ENTRIES = 128
+export const CACHE_MAX_ENTRIES = 256
 
 /** 缓存槽位：三个键合起来定义一个条目。 */
 export type CacheSlot = {
@@ -50,7 +55,9 @@ export type CacheSlot = {
 }
 
 /** 套用目标：一个带内容签名的「把快照写下去」回调。 */
-export type SnapshotTarget = CacheSlot & {
+export type SnapshotTarget = {
+  /** 内容签名，与 `CellFitSnapshot` 的缓存键同源。 */
+  contentKey: string
   /**
    * 套用一次快照。
    *
@@ -64,33 +71,118 @@ export type SnapshotTarget = CacheSlot & {
 export type TierApplyPlan = {
   /** 命中缓存并已套用的格子数。 */
   applied: number
-  /** 未命中、必须走实测适配的内容签名；调用方在恢复测量后把它们统一入队。 */
-  missing: string[]
+  /**
+   * 未命中的目标**下标**（按传入顺序），调用方需要对它们走实测适配。
+   *
+   * 用下标而不是内容签名，是因为内容相同的两个格子可以有完全不同的盒子
+   * （跨周视图里同一门课可以同时出现两次），签名不足以指认具体是哪一个。
+   */
+  missing: number[]
 }
 
-/** 当前几何键；`setCacheGeometry()` 变更时整表丢弃。 */
+/**
+ * 当前几何键。
+ *
+ * 它**不会**让旧条目失效：几何键是每一条条目键的一部分，换几何只是让旧条目查不到而已。
+ * 这条性质是量出来的必需品，不是洁癖 —— 手机上 2x 档网格宽过容器、出现水平滚动条，
+ * 滚动容器内容盒的高度从 548px 掉到 533px，几何键随之在「1x 一套 / 1.5x 与 2x 一套」之间
+ * 来回翻转。初版实现「键一变就清表」，于是每次换档都先把刚算好的另一档成果扔掉：实测
+ * 四轮捏合里有三轮仍在实测（`overflows()` 占 CPU 自身耗时 368ms，全场第 2）。
+ */
 let geometry = ''
 
 /** 条目表；`Map` 的插入序即淘汰序。 */
 const entries = new Map<string, CellFitSnapshot>()
 
+/** 键分隔符：NUL（内容签名与几何键里都不可能出现的字符）。 */
+const KEY_SEPARATOR = String.fromCharCode(0)
+
 function slotKey(slot: CacheSlot): string {
-  // 用 NUL 分隔，避免内容签名里出现同类分隔符时两个不同的槽位撞成同一个键。
-  return `${slot.contentKey}\u0000${slot.tier}`
+  // 几何键在最前面：它同样只是键的一部分，因此换几何不需要任何「失效」动作。
+  return [geometry, slot.contentKey, slot.tier].join(KEY_SEPARATOR)
+}
+
+/** 内容签名的组成部分；缺省字段在内部归一到空串。 */
+export type CourseContentParts = {
+  /** 课程号。 */
+  id: string
+  /** 课名。 */
+  name: string
+  /** 教室。 */
+  classroom?: string | undefined
+  /** 教师。 */
+  teacher?: string | undefined
+  /** 单双周标签（`全周` / `单周` / `双周` / `非本周`）。 */
+  parity?: string | undefined
+  /**
+   * 节次跨度（`startSection-endSection`）。
+   *
+   * 它不属于「文字」，却同样决定适配结果：同一门课从 1~2 节改成 1~4 节，文字一个字符都没变，
+   * 盒子却高了一倍 —— 少了这一项，改完节次的课会读到按旧高度算出来的排布（文字被裁）。
+   */
+  span?: string | undefined
+  /** 备注。 */
+  note?: string | undefined
+}
+
+/**
+ * 组装一个课程格的内容签名。
+ *
+ * 逐字段用 `|` 拼接：任何一个字段变了签名就变，旧条目因此**永远不会被读到** —— 不需要
+ * 「内容变更时记得清缓存」这类容易漏的失效逻辑（见模块头部的正确性论证）。
+ *
+ * 缺省字段在内部归一到空串，避免 `undefined` 与 `''` 在两个调用点算出两种签名
+ * （同一门课先没填教室、后来又填上，必须是两条不同的条目）。
+ *
+ * @param parts 内容字段。
+ * @returns 内容签名。
+ */
+export function courseContentKey(parts: CourseContentParts): string {
+  return [parts.id, parts.name, parts.classroom ?? '', parts.teacher ?? '', parts.parity ?? '', parts.note ?? '', parts.span ?? ''].join(
+    '|'
+  )
+}
+
+/**
+ * 由滚动容器内容盒、列模板与断点拼出几何键。
+ * 输入取**滚动容器内容盒 + 列模板 + 断点**，因为它们共同、且仅仅决定课程格的盒子尺寸：
+ * 容器内容盒决定网格宽度与行高（网格没落到 12 行最小值这个地板时），列模板决定「哪些列被折叠窄条」，
+ * 断点决定节次列是 2rem 还是 4rem。三者任一不同就是另一套几何。
+ *
+ * 三样东西**刻意不进键**：
+ *
+ * - **档位**：它是独立的键维度（`CacheSlot.tier`），进几何键等于把同一维数两遍；
+ * - **课程格宽度**：它本身就是档位的函数，进键会让几何键随档位翻转；
+ * - **课程格高度**：它是「容器内容盒 + 列模板 + 断点」的纯函数，重复进键只会把键切得更碎。
+ *
+ * 列模板要进键，是因为「折叠空列」不是布尔量：同样是折叠了 3 列，周一三五有课与周二四六有课
+ * 算出的列宽完全不同，而这时的容器盒子一模一样。
+ *
+ * 容器内容盒会随水平滚动条出现而变矮（手机上 1x→2x 少 15px），于是几何键在半数档位间翻转；
+ * 这是**可接受的**：换几何不清表（见 `geometry`），两套几何各留各的条目。
+ *
+ * 放在缓存模块里而不是各个调用点，是为了让「几何键由哪几项构成」只有一处定义：将来要加一项
+ * （比如行高模式）时不可能只改一半调用点，而漏改的那一半会静默地读到尺寸不对的旧快照。
+ *
+ * @param container 滚动容器的内容盒（`clientWidth` / `clientHeight`）。
+ * @param columns 列模板；关闭「折叠空列」开关时传 `'even'`（那种情形的列模板由 class 给定、与数据无关）。
+ * @param isMobile 是否命中手机断点（节次列 2rem/4rem 的差别）。
+ * @returns 几何键。
+ */
+export function geometryKeyOf(container: { width: number; height: number }, columns: string, isMobile: boolean): string {
+  return [container.width, container.height, columns, isMobile ? 'mobile' : 'desktop'].join('|')
 }
 
 /**
  * 声明当前几何。
  *
- * 只有键真的变化时才清表，因此每次渲染调一次也不会误伤缓存。
+ * 它**不清表**：几何键已经是每条条目键的一部分，换几何只会让旧条目查不到（详见文件头的论证）。
+ * 因此每次渲染调一次也不会误伤任何缓存。
  *
- * @param next 形如 `${容器宽}|${容器高}|${是否手机}|${是否折叠空列}`。
+ * @param next 几何键，用 {@link geometryKeyOf} 生成。
  */
 export function setCacheGeometry(next: string): void {
-  if (next === geometry) return
-
   geometry = next
-  entries.clear()
 }
 
 /** 当前几何键（供预热与自检读取）。 */
@@ -140,12 +232,14 @@ export function lookupFitSnapshot(slot: CacheSlot): CellFitSnapshot | undefined 
  */
 export function resolveTierApply(targets: readonly SnapshotTarget[], tier: number): TierApplyPlan {
   let applied = 0
-  const missing: string[] = []
+  const missing: number[] = []
 
-  for (const target of targets) {
+  for (let index = 0; index < targets.length; index += 1) {
+    const target = targets[index]
     const snapshot = lookupFitSnapshot({ contentKey: target.contentKey, tier })
+
     if (!snapshot) {
-      missing.push(target.contentKey)
+      missing.push(index)
       continue
     }
 

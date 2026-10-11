@@ -1,6 +1,6 @@
 import { format } from 'date-fns'
 import { Minus, Plus } from 'lucide-react'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import { useIsMobile } from '~/hooks/use-mobile'
 import type { Class, ClassMark } from '~/lib/types'
@@ -8,7 +8,9 @@ import { getMarkKey } from '~/store/utils'
 import { useScheduleDisplayStore } from '~/store/scheduleDisplayStore'
 import { cn } from '~/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip'
+import { setCellLayoutGeometryReader } from './cellLayout'
 import { CELL_CONTAINER_CLASS, GRID_CONTAINER_CLASS, cellScaleStyle } from './cellScale'
+import { geometryKeyOf } from './cellLayoutCache'
 import { resolveCourseTheme } from './courseColor'
 import { dayNames, sections, weekDays } from './constants'
 import ScheduleCourseCell from './ScheduleCourseCell'
@@ -96,6 +98,22 @@ export default function ScheduleTable({
     const dayTracks = weekDays.map((day) => (busyDays.has(day) ? BUSY_DAY_TRACK : COLLAPSED_DAY_TRACK))
     return [sectionTrack, ...dayTracks].join(' ')
   }, [isMobile, busyDays])
+
+  // 排布缓存要的「当前几何」由这里提供：只有这一层知道滚容器、列模板与断点（构成见 `geometryKeyOf`）。
+  // 交给缓存的是**读取器**而不是每次变化推一次值 —— 推送会晚一帧，而落定那一帧紧接着就要用它，
+  // 晚一帧的结果是「刚量过的档位白量」（见 `setCellLayoutGeometryReader` 的记录）。
+  useEffect(() => {
+    setCellLayoutGeometryReader(() => {
+      const scroll = scrollRef.current
+      if (!scroll) return ''
+
+      return geometryKeyOf(
+        { width: scroll.clientWidth, height: scroll.clientHeight },
+        collapseColumns ? gridTemplateColumns : 'even',
+        isMobile
+      )
+    })
+  }, [isMobile, collapseColumns, gridTemplateColumns, scrollRef])
 
   const gridStyle = useMemo(
     () =>

@@ -5,6 +5,7 @@ import {
   CACHE_MAX_ENTRIES,
   clearFitSnapshots,
   fitSnapshotCount,
+  geometryKeyOf,
   lookupFitSnapshot,
   recordFitSnapshot,
   resolveTierApply,
@@ -22,6 +23,7 @@ const SNAPSHOT: CellFitSnapshot = { hidden: 1, scale: 0.9, width: 24 }
  */
 function writeOnlyJob(log: string[]): CellLayoutJob {
   return {
+    contentKey: '',
     prepare: () => log.push('prepare'),
     overflows: () => {
       throw new Error('套用预计算排布时不得读 overflows()')
@@ -68,15 +70,24 @@ describe('档位排布缓存', () => {
     expect(lookupFitSnapshot({ contentKey: 'c1|数学|A101', tier: 2 })).toBeUndefined()
   })
 
-  it('几何键变化才整表丢弃，同键重复声明不误伤', () => {
+  it('换几何键不清表：两套几何各留各的条目，且互不串味', () => {
     recordFitSnapshot({ contentKey: 'c1', tier: 2 }, SNAPSHOT)
 
+    // 同一个几何键重复声明不误伤（`ScheduleTable` 每次 sync 都会调一次）。
     setCacheGeometry('379|600|true|false')
+    expect(lookupFitSnapshot({ contentKey: 'c1', tier: 2 })).toEqual(SNAPSHOT)
+
+    // 换一套几何（手机 2x 档出现水平滚动条，容器内容盒矮 15px）：旧条目查不到了，但没被丢掉。
+    setCacheGeometry('379|585|true|false')
+    expect(lookupFitSnapshot({ contentKey: 'c1', tier: 2 })).toBeUndefined()
     expect(fitSnapshotCount()).toBe(1)
 
-    setCacheGeometry('379|600|true|true')
-    expect(fitSnapshotCount()).toBe(0)
-    expect(lookupFitSnapshot({ contentKey: 'c1', tier: 2 })).toBeUndefined()
+    recordFitSnapshot({ contentKey: 'c1', tier: 2 }, { hidden: 2, scale: 1, width: 41 })
+
+    // 切回去读到的还是原来那一条，不会被另一套几何的结果覆盖。
+    setCacheGeometry('379|600|true|false')
+    expect(lookupFitSnapshot({ contentKey: 'c1', tier: 2 })).toEqual(SNAPSHOT)
+    expect(fitSnapshotCount()).toBe(2)
   })
 
   it('超出上限按插入序淘汰最早写入的一条', () => {
@@ -106,6 +117,22 @@ describe('档位排布缓存', () => {
   })
 })
 
+describe('几何键', () => {
+  it('容器内容盒 / 列模板 / 断点任一不同就是另一套几何', () => {
+    const base = geometryKeyOf({ width: 379, height: 548 }, 'even', true)
+
+    expect(base).toBe(geometryKeyOf({ width: 379, height: 548 }, 'even', true))
+    // 手机 1x→2x：水平滚动条吃掉 15px 内容盒高度（P4 实读 548 → 533）。
+    expect(base).not.toBe(geometryKeyOf({ width: 379, height: 533 }, 'even', true))
+    expect(base).not.toBe(geometryKeyOf({ width: 412, height: 548 }, 'even', true))
+    expect(base).not.toBe(geometryKeyOf({ width: 379, height: 548 }, '2rem minmax(0,1fr) minmax(0,0.5rem)', true))
+    expect(base).not.toBe(geometryKeyOf({ width: 379, height: 548 }, 'even', false))
+
+    // 档位（`CacheSlot.tier`）与课程格宽度都不进键：前者是独立维度，后者本身就是档位的函数。
+    // 这条由签名保证 —— `geometryKeyOf` 根本不接受档位。
+  })
+})
+
 describe('档位套用', () => {
   it('全部命中时逐格套用，未命中名单为空', () => {
     recordFitSnapshot({ contentKey: 'c1', tier: 2 }, SNAPSHOT)
@@ -114,8 +141,8 @@ describe('档位套用', () => {
     const applied: string[] = []
     const plan = resolveTierApply(
       [
-        { contentKey: 'c1', tier: 2, apply: (snapshot) => applied.push(`c1:${snapshot.width}`) },
-        { contentKey: 'c2', tier: 2, apply: (snapshot) => applied.push(`c2:${snapshot.width}`) },
+        { contentKey: 'c1', apply: (snapshot) => applied.push(`c1:${snapshot.width}`) },
+        { contentKey: 'c2', apply: (snapshot) => applied.push(`c2:${snapshot.width}`) },
       ],
       2
     )
@@ -124,19 +151,19 @@ describe('档位套用', () => {
     expect(applied).toEqual(['c1:24', 'c2:0'])
   })
 
-  it('未命中的格子不进套用、只登记进名单，由调用方恢复测量后补测', () => {
+  it('未命中的格子不进套用、只按下标登记进名单，由调用方恢复测量后补测', () => {
     recordFitSnapshot({ contentKey: 'c1', tier: 2 }, SNAPSHOT)
 
     const applied: string[] = []
     const plan = resolveTierApply(
       [
-        { contentKey: 'c1', tier: 2, apply: () => applied.push('c1') },
-        { contentKey: 'missing', tier: 2, apply: () => applied.push('missing') },
+        { contentKey: 'c1', apply: () => applied.push('c1') },
+        { contentKey: 'missing', apply: () => applied.push('missing') },
       ],
       2
     )
 
-    expect(plan).toEqual({ applied: 1, missing: ['missing'] })
+    expect(plan).toEqual({ applied: 1, missing: [1] })
     expect(applied).toEqual(['c1'])
   })
 
@@ -144,13 +171,13 @@ describe('档位套用', () => {
     const applied: string[] = []
     const plan = resolveTierApply(
       [
-        { contentKey: 'c1', tier: 1, apply: () => applied.push('c1') },
-        { contentKey: 'c2', tier: 1, apply: () => applied.push('c2') },
+        { contentKey: 'c1', apply: () => applied.push('c1') },
+        { contentKey: 'c2', apply: () => applied.push('c2') },
       ],
       1
     )
 
-    expect(plan).toEqual({ applied: 0, missing: ['c1', 'c2'] })
+    expect(plan).toEqual({ applied: 0, missing: [0, 1] })
     expect(applied).toEqual([])
   })
 })

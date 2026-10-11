@@ -104,7 +104,24 @@ const collectWindow = () =>
   const p = window.__zoomPerf; p.active = false;
   return {...p, zoomLevel: Number(document.querySelector('[data-schedule-grid]').dataset.zoomLevel),
           inlineZoom: document.querySelector('[data-schedule-grid]').style.getPropertyValue('--schedule-zoom'),
-          scaled: [...document.querySelectorAll('[data-course-cell]')].filter(el => el.style.getPropertyValue('--cc-scale')).length};
+          scaled: [...document.querySelectorAll('[data-course-cell]')].filter(el => el.style.getPropertyValue('--cc-scale')).length,
+          // 几何读数（P4 起）：容器内容盒会被滚动条征用，而课程格盒子不会 —— 几何键以课程格盒子为准
+          // 的论证就靠这几行数值钉住（见 research/README.md §9）。
+          geometry: (() => {
+            const scroll = document.querySelector('[data-schedule-scroll]');
+            const grid = document.querySelector('[data-schedule-grid]');
+            const cell = scroll.querySelector('[data-course-cell]');
+            return {
+              containerClient: [scroll.clientWidth, scroll.clientHeight],
+              containerOffset: [scroll.offsetWidth, scroll.offsetHeight],
+              scrollbar: [scroll.offsetWidth - scroll.clientWidth, scroll.offsetHeight - scroll.clientHeight],
+              grid: [grid.clientWidth, grid.clientHeight],
+              cell: cell ? [cell.offsetWidth, cell.offsetHeight] : null,
+              key: cell ? cell.dataset.courseKey : null,
+              cells: document.querySelectorAll('[data-course-cell]').length,
+              columns: getComputedStyle(grid).gridTemplateColumns,
+            };
+          })()};
 })()`)
 
 /** 把一段窗口读数压成可比指标。 */
@@ -162,7 +179,7 @@ if (mode === 'touch' || mode === 'both') {
     const window = await collectWindow()
     const gesture = summarize(window, window.start, beforeRelease)
     const afterRelease = summarize(window, beforeRelease, beforeRelease + 600)
-    const run = { plan: plan.name, expectTier: plan.expect, gesture, afterRelease, finalZoomLevel: window.zoomLevel }
+    const run = { plan: plan.name, expectTier: plan.expect, gesture, afterRelease, finalZoomLevel: window.zoomLevel, geometry: window.geometry }
     report.touch.push(run)
     if (output) writeFileSync(output, JSON.stringify(report, null, 2) + '\n')
     console.log(JSON.stringify({ mode: 'touch', ...run }))
@@ -196,7 +213,7 @@ if (mode === 'sweep' || mode === 'both') {
     await sleep(1400)
     const end = await evaluate('performance.now()')
     const window = await collectWindow()
-    const run = { direction, span: direction === 'out' ? '1x→2x' : '2x→1x', from: start, to: end, window: summarize(window, start, end) }
+    const run = { direction, span: direction === 'out' ? '1x→2x' : '2x→1x', from: start, to: end, window: summarize(window, start, end), geometry: window.geometry }
     // 复位到真实档位，供下一轮从一致的起点出发。
     await evaluate(`(() => { document.querySelector('[data-schedule-grid]').style.removeProperty('--schedule-zoom'); return true })()`)
     report.sweep.push(run)

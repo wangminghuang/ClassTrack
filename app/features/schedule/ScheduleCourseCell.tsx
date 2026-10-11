@@ -5,6 +5,7 @@ import { cn } from '~/lib/utils'
 import { useScheduleDisplayStore } from '~/store/scheduleDisplayStore'
 import { isAttendanceMarked } from '~/store/utils'
 import { cellLayoutQueue, createCellLayoutJob } from './cellLayout'
+import { courseContentKey } from './cellLayoutCache'
 import { CELL_ABSENT_RING_CLASS, CELL_ATTENDED_RING_CLASS, CELL_BADGE_CLASS, CELL_FONT_CLASS, CELL_RING_CLASS } from './cellScale'
 import type { CourseColorTheme } from './courseColor'
 import { getWeekParityLabel } from './utils'
@@ -39,6 +40,22 @@ export default function ScheduleCourseCell({ course, mark, theme, attendanceEnab
   const isAbsent = attendanceMarked && !isAttended
   const note = mark?.note || ''
   const parityLabel = isOutOfWeek ? '非本周' : getWeekParityLabel(course.weeks)
+
+  /**
+   * 内容签名：既是这一格的测量作业在预计算缓存里的键，也是 `data-course-key` 的取值
+   * （浏览器验收脚本按它逐格比对排布）。内容一改签名就变，旧条目永远不会被读到，
+   * 所以缓存侧不需要任何显式失效逻辑（见 `cellLayoutCache.ts` 模块头）。
+   */
+  const contentKey = courseContentKey({
+    id: course.id,
+    name: course.name,
+    classroom: course.classroom,
+    teacher: course.teacher,
+    parity: parityLabel,
+    note,
+    // 节次跨度也在签名里：改了上课节次，文字一个字没变，盒子高度却变了。
+    span: `${course.startSection}-${course.endSection}`,
+  })
   // 出勤痕迹要同时满足「出勤统计已开启」与「用户在课表显示里没关掉它」，且只针对本周课：
   // 非本周课一般没有当周标记，灰色态优先，不再叠加任何出勤痕迹。
   const showAttendance = attendanceEnabled && showAttendanceStatus && !isOutOfWeek
@@ -60,7 +77,7 @@ export default function ScheduleCourseCell({ course, mark, theme, attendanceEnab
     const button = buttonRef.current
     if (!button) return
 
-    const job = createCellLayoutJob(button)
+    const job = createCellLayoutJob(button, contentKey)
     if (!job) return
     let cancelled = false
     const measure = () => {
@@ -88,13 +105,14 @@ export default function ScheduleCourseCell({ course, mark, theme, attendanceEnab
       document.fonts?.removeEventListener('loadingdone', measure)
       observer.disconnect()
     }
-  }, [course.name, course.classroom, course.teacher, parityLabel, note])
+  }, [contentKey])
 
   return (
     <button
       ref={buttonRef}
       type="button"
       data-course-cell
+      data-course-key={contentKey}
       {...(isOutOfWeek ? { 'data-course-out-of-week': '' } : {})}
       className={cn(
         'group relative flex h-full min-h-0 w-full cursor-pointer flex-col overflow-hidden text-left focus-visible:z-10 focus-visible:outline-none',

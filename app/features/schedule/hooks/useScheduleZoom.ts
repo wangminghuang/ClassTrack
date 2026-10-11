@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { resumeCellLayout, suspendCellLayout } from '../cellLayout'
+import { resumeCellLayout, setCellLayoutTier, suspendCellLayout } from '../cellLayout'
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_TIERS } from '../constants'
 import { clampZoom, getDetailLevel, snapZoomTier } from '../utils'
 import { TAP_MOVE_TOLERANCE_PX, isTapSizedMove } from '../weekSwipe'
@@ -259,7 +259,8 @@ export function useScheduleZoom() {
   /**
    * 落定：一次性把真实排布换上，并收掉预览。
    *
-   * 顺序不能换：先改宽度（写 `--schedule-zoom`）→ 再补 `scrollLeft`（写 `scrollLeft` 会强制
+   * 顺序不能换：先声明档位（`setCellLayoutTier`，本帧末到来的 `ResizeObserver` 回声要靠它命中
+   * 预计算缓存）→ 再改宽度（写 `--schedule-zoom`）→ 再补 `scrollLeft`（写 `scrollLeft` 会强制
    * 一次排版，必须在宽度变更之后，否则会被旧的滚动范围截断）→ 最后收掉变换。
    *
    * 变换之所以能直接清掉而不跳：过渡的终点比例取「目标档位 / 起始档位」，与真实排布在这一帧
@@ -284,7 +285,8 @@ export function useScheduleZoom() {
       centerX: gesture.scrollCenterX,
       ratio: tierScaleRatio(gesture.committedTier, tier),
     })
-
+    // 档位必须在同一个任务里先声明：回声到达时队列已经需要它才能命中缓存。
+    setCellLayoutTier(tier)
     if (grid) grid.style.setProperty('--schedule-zoom', String(tier))
     if (scroll) scroll.scrollLeft = nextScrollLeft
 

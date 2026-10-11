@@ -5,6 +5,17 @@
 >
 > 回滚点：每个里程碑都对应一个可独立回退的提交边界（`P1`–`P6` 各自一个 commit）。
 
+里程碑提交（分支 `fix/schedule-zoom-jank`）：
+
+| 里程碑 | 提交 | 一句话 |
+| --- | --- | --- |
+| 规划与基线 | `fc0df30` | 计划、基线与归因读数 |
+| P1 | `55e0b06` | 纯函数核（变换数学、常量、缓存表） |
+| P2 | `981e93d` | 冻结测量 + 手势期合成层预览 |
+| P3 | `b761e8d` | 落定动画 + 三条入口统一 |
+| P4 | `0afb297` | 落定套用预计算排布，命中即零测量 |
+| P5 | 见本提交 | 空闲预热两个非当前档位 |
+
 ## 前置：门禁基线
 
 开工前先确认工作区干净、门禁是绿的，否则后面的失败分不清是谁引入的。
@@ -153,20 +164,35 @@ bash .trellis/tasks/10-11-schedule-zoom-jank/research/run-zoom-perf.sh 1 <out.js
 
 **目标**：把「首访某档位时的落定卡顿」提前到空闲窗口。
 
-1. 新建 `app/features/schedule/hooks/useZoomTierWarmup.ts`：
-   - 条件：`requestIdleCallback` 可用（不可用则整体跳过）、当前 `idle` 状态、
-     距上次交互 ≥ `WARMUP_IDLE_DELAY_MS = 500`。
-   - 克隆 `[data-schedule-grid]` 到离屏宿主（宽高取自滚容器与真实网格 `offsetHeight`），
-     设 `--schedule-zoom: T`，按格子分片建 job、分片跑 `fitCourseCells`、读回快照写缓存。
-   - 取消：`pointerdown` / `touchstart` / 滚容器 `scroll` / `wheel` / 档位变化 /
-     `geometryKey` 变化 / 卸载 → 立即卸载克隆并停止后续分片。
+**实际落点（与初版计划的差异）**：
+
+1. `app/features/schedule/zoomWarmup.ts`（新）：预热**纯策略**（选档位、分片、前提失效判定），
+   node 里可单测 —— 只留下「克隆、排帧、卸载」这些脱离浏览器无法断言的部分在 hook 里。
+2. `app/features/schedule/hooks/useZoomTierWarmup.ts`（新）：
+   - 条件：`requestIdleCallback` 可用（不可用则整体跳过）、首片前静默 `WARMUP_IDLE_DELAY_MS = 500`；
+   - 克隆 `[data-schedule-grid]` 到离屏宿主（**宽 = 滚容器 `clientWidth`、高 = 真实网格 `offsetHeight`**，
+     这两项必须与真实网格逐项相同，理由见 `research/README.md` §10.2）、设 `--schedule-zoom: T`；
+   - 按 `[data-course-key]` 建 job、每片 4 格跑 `fitCourseCells`（片内 `withCellLayoutScope` 换档位与几何）、
+     读回快照写缓存；克隆里的格子**抹掉 `data-course-cell`**，让验收脚本的全局查询看不见它；
+   - 取消：`pointerdown` / `wheel` / `touchstart` / 滚容器 `scroll` / 档位变化 / 每片复查几何变化 /
+     卸载 → 立即卸载克隆并停止后续分片；
    - 只预热非当前档位。
-2. 加一个常量开关 `WARMUP_ENABLED`，默认开；关掉后一切终态不变。
+3. `cellLayout.ts`（改）：`withCellLayoutScope({ tier, readGeometry }, run)` —— 预热要临时换掉
+   「这批格子属于哪一档、什么盒子」这两个来源，跑完还原。
+4. **几何键改为档位无关**（P5 逼出来的正面修正）：由「滚容器内容盒 × 列模板 × 断点」改为
+   「滚容器内容宽 × **网格自身高度** × 列模板 × 断点」。容器内容盒高度会随水平滚动条在档位间翻转
+   （548 ↔ 533），预热算不出「真实路径之后会读到哪个键」；网格高被 12 行地板钳在 780px，三档同一个值。
+   同时 `columns` 必须传**内联 style 的模板字符串**（`getComputedStyle` 的结果已含档位像素值）。
+   `CACHE_MAX_ENTRIES` 随之 256 → 128。
+5. 没有做「`WARMUP_ENABLED` 常量开关」：取消路径已经覆盖交互，而开关会让「预热是否生效」多一种
+   只在测试里存在的状态；要回滚就整体回滚这个提交。
 
-**门**：预热开启与关闭两种状态下，AC3/AC4/AC5 的断言都通过；预热期间的人为交互
-（脚本在预热切片中间派发 `pointerdown`）能立刻取消、且随后的捏合仍达标（AC1）。
+**门**：AC3/AC4/AC5 在预热开启时全过（`p5-zoom-rest.json` 12 项、`p5-ac5.json.*` violations 0）；
+`PREWAIT_MS=3000` 跑 touch 后，**每个 (几何, 档位) 组合的第一批访问就是 `a18#m0`**（`p5-hit-miss.json`），
+且松手后的长任务降到引擎自重排量级（`p5-after-warmup.json`：四轮里三轮零长任务、一轮 52ms）。
 
-**回滚点**：`P5`（关掉开关即等价于未实现）。
+**回滚点**：`P5`（revert 这个提交即回到「首访档位要实测一次」；没有开关，因为单独的开关会让
+「预热是否生效」多出一种只在测试里存在的状态）。
 
 ## P6 规范、守卫与门禁收口
 

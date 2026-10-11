@@ -123,7 +123,7 @@ export type CellFitSnapshot = {
 ### 6.2 键：把正确性交给键，而不是交给失效逻辑
 
 ```
-geometryKey  = `${containerClientWidth}|${containerClientHeight}|${columns}|${isMobile ? 'mobile' : 'desktop'}`
+geometryKey  = `${scrollClientWidth}|${gridHeight}|${columns}|${isMobile ? 'mobile' : 'desktop'}`
 contentKey   = `${course.id}|${name}|${classroom}|${teacher}|${parityLabel}|${note}|${startSection}-${endSection}`
 slotKey      = `${geometryKey}${KEY_SEPARATOR}${contentKey}${KEY_SEPARATOR}${tier}`  // KEY_SEPARATOR = String.fromCharCode(0)
 ```
@@ -134,7 +134,13 @@ slotKey      = `${geometryKey}${KEY_SEPARATOR}${contentKey}${KEY_SEPARATOR}${tie
 - **节次跨度必须进内容签名**：同一门课改节次时课名/教室/教师都没变，而盒子高度变了；
   不进签名就会读到按旧高度算的排布（文字被裁）。
 - **档位不进几何键**（它是独立维度，独立成 `slotKey` 的第三段）；**课程格宽度也不进几何键**
-  —— 它是档位的函数，档位已经进键了。
+  —— 它是「容器内容宽 × 档位」的函数，档位已经进键了。
+- **宽取容器、高取网格**这一对组合是让几何键**对档位不敏感**的关键（P5 修正，见
+  `research/README.md` §10.1）：网格高被「12 行 × 62px」地板钳在 780px，三档同一个值；网格宽该随档位变，
+  那部分由档位键负责。早先两样都取容器的内容盒，2x 的水平滚动条会让它矮 15px（548 → 533），
+  几何键随档位翻转，既切碎条目（§9.1/§9.2）又让 P5 的预热算不出「真实路径会读到哪个键」。
+- **列模板传内联 style 里那个字符串**，不要传 `getComputedStyle` 的结果：后者已把档位算进像素值
+  （1x `"32px 49.56px …"` / 2x `"32px 103.7px …"`），会把几何键重新变得随档位翻转。
 - **换几何不清表**（实现期修正，见 `research/README.md` §9.2）：几何键进每条条目的键，换几何只是查不到，
   靠 LRU 淘汰。初版「`geometryKey` 变化时整表丢弃」在手机上会变成恶性循环：2x 出现水平滚动条后容器
   内容盒矮 15px，几何键在 1x（高）与 2x（矮）之间来回翻转，于是每次换档先把另一档刚算好的条目扔掉。
@@ -148,20 +154,30 @@ slotKey      = `${geometryKey}${KEY_SEPARATOR}${contentKey}${KEY_SEPARATOR}${tie
 
 1. **真实适配时顺手记录**（零额外成本）：`fitCourseCells` 跑完一批后，对每个 job 读回快照
    并写进缓存。任何一次真实适配都会让它自己所在档位的条目变热。
-2. **空闲预热**（把「首访档位的那一次卡顿」提前到用户看不见的时候）：
+2. **空闲预热**（把「首访档位的那一次卡顿」提前到用户看不见的时候）—— 见 `hooks/useZoomTierWarmup.ts`：
    - 把 `[data-schedule-grid]` 克隆到一个离屏宿主
      （`position:fixed;left:-99999px;visibility:hidden;pointer-events:none`，
      宽 = 滚容器 `clientWidth`、高 = 真实网格 `offsetHeight`、`--schedule-zoom: T`）；
-   - 按 `[data-course-cell]` 建 job（与组件共用同一个 `createCellLayoutJob`），
-     **按格子分片**，每片一个 `requestIdleCallback` 切片；
-   - 每片跑完读回快照写进 `(geometryKey, T)` 下的对应 `contentKey`；
-   - 任何 `pointerdown` / `touchstart` / 滚动 / 档位变化 / `geometryKey` 变化 → **立刻取消并卸载克隆**；
-   - 只预热**非当前**的两个档位。
+   - 按 `[data-course-key]` 建 job（与组件共用同一个 `createCellLayoutJob`）—— 枚举**不用**
+     `[data-course-cell]`，因为克隆会把那个锚点抹掉（见下）；
+   - 每片 4 格、一片一个 `requestIdleCallback`，片内用
+     `withCellLayoutScope({ tier: T, readGeometry: 克隆自己的几何 }, () => fitCourseCells(slice))`
+     临时换掉「档位 + 几何」两个来源，跑完还原；
+   - 任何 `pointerdown` / `wheel` / `touchstart` / 滚动 / 档位变化 / 几何变化 → **立刻取消并卸载克隆**
+     （每片开头复查一次几何）；
+   - 只预热**非当前**的档位；引擎没有 `requestIdleCallback` 时整体跳过。
+   - 克隆里的格子会去掉 `data-course-cell`：预热对浏览器的全局读数必须「不存在」，
+     否则验收脚本按 `[data-course-cell]` 数格子会数到 36 格。
+
+  宿主尺寸为什么正好是这两项：几何键由「容器内容宽 × 网格高」构成，克隆必须让这两项与真实网格逐项
+  相同，预热记下的键才等于真实路径之后会查的键；对不上也只是「预热白做」（查不到），不会让用户
+  看到没算过的排布。论证见 `research/README.md` §10.2。
 
   成本口径：`fitCourseCells` 的读阶段无法再分片（每片仍会强制整文档布局），所以预热是
-  「若干次 ~几十毫秒的空闲切片」，不是零成本。这正是它必须可取消的原因。
+  「若干次 ~8ms 的空闲切片」，不是零成本。这正是它必须可取消的原因。
 
   落地顺序上这条排最后：即使预热完全没跑成，缓存也有来源 1 兜底，功能与终态不变。
+  实测（`research/p5-after-warmup.json`）：预热跑成时四轮捏合的手势期与松手后都只剩引擎自重排量级。
 
 ### 6.4 目录与模块边界
 
@@ -171,11 +187,13 @@ slotKey      = `${geometryKey}${KEY_SEPARATOR}${contentKey}${KEY_SEPARATOR}${tie
 | `zoomPreview.test.ts`（新） | 钉住常量、换算、降级与三条入口的等价性 |
 | `cellLayoutCache.ts`（新） | 快照类型、缓存读写、`geometryKey`、`resolveTierApply()`（纯函数：快照表 → 逐格写入计划） |
 | `cellLayoutCache.test.ts`（新） | 钉住「命中即零读取」、键的构成（几何 × 内容 × 档位）、LRU 淘汰、换几何**不**串味 |
-| `cellLayout.ts`（改） | 抽出 `createCellLayoutJob(button)`（组件与预热共用）、加挂起闸门、批次跑完回读快照 |
+| `cellLayout.ts`（改） | 抽出 `createCellLayoutJob(button, contentKey)`（组件与预热共用）、挂起闸门、批次命中纯写/未命中实测并回读快照、几何读取器与 `withCellLayoutScope` |
 | `ScheduleCourseCell.tsx`（改） | 改用抽出的 job 构造器；补 `data-course-key`（内容签名，作为缓存键与断言锚点） |
-| `ScheduleTable.tsx`（改） | stage 上补 `data-schedule-zoom-stage`；把几何**读取器**（滚容器内容盒 × 列模板 × 断点）注册给缓存 |
+| `ScheduleTable.tsx`（改） | stage 上补 `data-schedule-zoom-stage`；把几何**读取器**（容器内容宽 × 网格高 × 列模板 × 断点）注册给缓存；调用空闲预热 |
 | `useScheduleZoom.ts`（改） | 状态机、手势 → 预览、按钮/双击 → 过渡、统一落定 |
-| `hooks/useZoomTierWarmup.ts`（新） | 空闲预热与取消 |
+| `zoomWarmup.ts`（新） | 预热**纯策略**：选档位、分片、前提失效判定（可在 node 里单测） |
+| `zoomWarmup.test.ts`（新） | 钉住「只预热非当前档位」「分片不重不漏」「几何一变即整体放弃」 |
+| `hooks/useZoomTierWarmup.ts`（新） | 空闲预热与取消：克隆、排帧、卸载、抹掉克隆的格子锚点 |
 
 `createCellLayoutJob` 抽出来后，组件里那段 `useLayoutEffect` 只剩「挂载即入队 / 字体就绪补测 /
 `ResizeObserver` 观察」这三件事，测量规则本身只剩一处真源。

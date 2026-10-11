@@ -166,6 +166,44 @@ export function currentCellLayoutGeometry(): string {
   return readGeometry?.() ?? ''
 }
 
+/** 一次「换作用域运行」的参数：档位与几何读取器一起换。 */
+export type CellLayoutScope = {
+  /** 这段运行里这批格子所属的档位。 */
+  tier: number
+  /** 这段运行里的几何读取器（预热要读克隆网格的盒子，而不是真实网格的）。 */
+  readGeometry: () => string
+}
+
+/**
+ * 在给定作用域里跑一段，跑完把档位与几何读取器都还原。
+ *
+ * 这是给空闲预热开的口子：预热量的是一份离屏克隆，它的档位与盒子都与真实网格不同，
+ * 而 `fitCourseCells()` 是从这两个模块级来源取「这批格子属于哪一档、什么盒子」的。
+ *
+ * 用「临时换、跑完还原」而不是把档位/几何做成显式参数：真实路径的两个来源都是**当帧的 DOM 状态**
+ * （`commit` 声明档位、`ScheduleTable` 注册读取器），把它们透传到底会把这条时序纪律拆散在多处；
+ * 而换作用域只在同步调用的一瞬间生效，中间不可能插进真实批次（JS 单线程，且预热从不在帧回调里
+ * 让出）。
+ *
+ * @param scope 这段运行的作用域。
+ * @param run 要跑的逻辑（通常是 `fitCourseCells`）。
+ * @returns `run` 的返回值。
+ */
+export function withCellLayoutScope<T>(scope: CellLayoutScope, run: () => T): T {
+  const previousTier = currentTier
+  const previousReader = readGeometry
+
+  currentTier = scope.tier
+  readGeometry = scope.readGeometry
+
+  try {
+    return run()
+  } finally {
+    currentTier = previousTier
+    readGeometry = previousReader
+  }
+}
+
 /**
  * 逐个读一遍格子，返回谓词为真的下标。
  *

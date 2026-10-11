@@ -148,6 +148,11 @@ await installObservers()
 
 // ── A. 真实双指捏合 ────────────────────────────────────────────────────────────
 if (mode === 'touch' || mode === 'both') {
+  // 空闲预热的窗口：默认 0（捏合紧接加载，预热来不及跑），设 PREWAIT_MS 可让它跑完 ——
+  // 这正是真机上「打开 App 看一眼再捏」的时序，也是预热唯一有意义的时序。
+  const prewait = Number(process.env.PREWAIT_MS ?? 0)
+  if (prewait > 0) await sleep(prewait)
+
   // 交替「捏开 → 捏拢」，每轮都从已提交档位出发，避免依赖 reload 复位。
   const plans = [
     { name: 'pinch-out-1x→2x', from: 60, to: 132, expect: 2 },

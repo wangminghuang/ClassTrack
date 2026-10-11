@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createCellLayoutQueue, fitCourseCells, setCellLayoutGeometryReader, setCellLayoutTier } from './cellLayout'
+import {
+  createCellLayoutQueue,
+  currentCellLayoutGeometry,
+  fitCourseCells,
+  setCellLayoutGeometryReader,
+  setCellLayoutTier,
+  withCellLayoutScope,
+} from './cellLayout'
 import type { CellLayoutJob } from './cellLayout'
 import { clearFitSnapshots, fitSnapshotCount, lookupFitSnapshot, recordFitSnapshot, setCacheGeometry } from './cellLayoutCache'
 import { CELL_FALLBACK_SCALES } from './cellScale'
@@ -223,5 +230,70 @@ describe('档位排布缓存接入适配路径', () => {
 
     expect(log).toContain('c1:read:-1')
     expect(fitSnapshotCount()).toBe(0)
+  })
+})
+
+describe('预热作用域切换（离线克隆用）', () => {
+  beforeEach(() => {
+    clearFitSnapshots()
+    setCellLayoutTier(1)
+    setCellLayoutGeometryReader(() => '379|780|even|mobile')
+    setCacheGeometry('379|780|even|mobile')
+  })
+
+  it('作用域里跑实测，结果记在作用域的档位与几何下，而不是真实那套', () => {
+    const log: string[] = []
+
+    withCellLayoutScope({ tier: 2, readGeometry: () => '379|780|even|mobile' }, () => {
+      expect(currentCellLayoutGeometry()).toBe('379|780|even|mobile')
+      fitCourseCells([cell('c1', log, 1, false, 'c1|数学|A203')])
+    })
+
+    // 记录落在「作用域档位 2x」下：这正是真实路径切到 2x 时会去查的那个键。
+    setCacheGeometry('379|780|even|mobile')
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A203', tier: 2 })).toEqual({ hidden: 2, scale: 1, width: 31 })
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A203', tier: 1 })).toBeUndefined()
+  })
+
+  it('作用域里的几何与真实的不同（例如预热宿主盒子对不上）时，条目记在作用域几何下、不会串味', () => {
+    withCellLayoutScope({ tier: 2, readGeometry: () => 'clone|900|even|mobile' }, () => {
+      fitCourseCells([cell('c1', [], 1, false, 'c1|数学|A203')])
+    })
+
+    setCacheGeometry('clone|900|even|mobile')
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A203', tier: 2 })).toBeDefined()
+
+    // 真实几何下查不到 —— 对不上就是「预热白做」，而不是让真实路径拿到一份盒子不对的排布。
+    setCacheGeometry('379|780|even|mobile')
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A203', tier: 2 })).toBeUndefined()
+  })
+
+  it('跑完还原档位：作用域外的下一批仍按外面的档位入库', () => {
+    withCellLayoutScope({ tier: 2, readGeometry: () => '379|780|even|mobile' }, () => {
+      fitCourseCells([cell('c1', [], 1, false, 'c1|数学|A203')])
+    })
+
+    fitCourseCells([cell('c2', [], 1, false, 'c2|数学|A203')])
+
+    expect(lookupFitSnapshot({ contentKey: 'c2|数学|A203', tier: 1 })).toBeDefined()
+    expect(lookupFitSnapshot({ contentKey: 'c2|数学|A203', tier: 2 })).toBeUndefined()
+  })
+
+  it('作用域里抛错也要还原 —— 一次异常不能把预热的几何留在真实路径上', () => {
+    expect(() =>
+      withCellLayoutScope({ tier: 2, readGeometry: () => 'clone|900|even|mobile' }, () => {
+        throw new Error('boom')
+      })
+    ).toThrow('boom')
+
+    expect(currentCellLayoutGeometry()).toBe('379|780|even|mobile')
+
+    fitCourseCells([cell('c1', [], 1, false, 'c1|数学|A203')])
+    setCacheGeometry('379|780|even|mobile')
+    expect(lookupFitSnapshot({ contentKey: 'c1|数学|A203', tier: 1 })).toBeDefined()
+  })
+
+  it('作用域返回内部返回值', () => {
+    expect(withCellLayoutScope({ tier: 2, readGeometry: () => '' }, () => 'value')).toBe('value')
   })
 })

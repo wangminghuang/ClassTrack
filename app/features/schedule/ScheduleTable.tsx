@@ -16,6 +16,7 @@ import { dayNames, sections, weekDays } from './constants'
 import ScheduleCourseCell from './ScheduleCourseCell'
 import { useScheduleZoom } from './hooks/useScheduleZoom'
 import { useWeekSwipeGesture } from './hooks/useWeekSwipeGesture'
+import { useZoomTierWarmup } from './hooks/useZoomTierWarmup'
 import { getDayDate } from './utils'
 import type { SectionTime, VisibleCourse } from './utils'
 
@@ -102,18 +103,29 @@ export default function ScheduleTable({
   // 排布缓存要的「当前几何」由这里提供：只有这一层知道滚容器、列模板与断点（构成见 `geometryKeyOf`）。
   // 交给缓存的是**读取器**而不是每次变化推一次值 —— 推送会晚一帧，而落定那一帧紧接着就要用它，
   // 晚一帧的结果是「刚量过的档位白量」（见 `setCellLayoutGeometryReader` 的记录）。
+  // 宽取滚容器、高取网格：这一对在档位之间不变，因此三档共用同一套几何键（见 `geometryKeyOf`）。
   useEffect(() => {
     setCellLayoutGeometryReader(() => {
+      const grid = gridRef.current
       const scroll = scrollRef.current
-      if (!scroll) return ''
+      if (!grid || !scroll) return ''
 
       return geometryKeyOf(
-        { width: scroll.clientWidth, height: scroll.clientHeight },
+        { width: scroll.clientWidth, height: grid.offsetHeight },
         collapseColumns ? gridTemplateColumns : 'even',
         isMobile
       )
     })
-  }, [isMobile, collapseColumns, gridTemplateColumns, scrollRef])
+  }, [isMobile, collapseColumns, gridTemplateColumns, gridRef, scrollRef])
+
+  // 空闲预热其余档位：首访某档时那一次实测被提前到用户看不见的时候（见 `useZoomTierWarmup`）。
+  useZoomTierWarmup({
+    gridRef,
+    scrollRef,
+    zoom,
+    isMobile,
+    columns: collapseColumns ? gridTemplateColumns : 'even',
+  })
 
   const gridStyle = useMemo(
     () =>

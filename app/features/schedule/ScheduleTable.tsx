@@ -56,7 +56,7 @@ export default function ScheduleTable({
   onDayHeaderClick,
 }: ScheduleTableProps) {
   const isMobile = useIsMobile()
-  const { zoom, detailLevel, scrollRef, gridRef, containerProps, zoomIn, zoomOut, canZoomIn, canZoomOut } = useScheduleZoom()
+  const { zoom, detailLevel, scrollRef, zoomStageRef, gridRef, containerProps, zoomIn, zoomOut, canZoomIn, canZoomOut } = useScheduleZoom()
 
   const collapseEmptyWeekdayColumns = useScheduleDisplayStore((state) => state.collapseEmptyWeekdayColumns)
   const edgeSwipeWeekSwitch = useScheduleDisplayStore((state) => state.edgeSwipeWeekSwitch)
@@ -112,7 +112,7 @@ export default function ScheduleTable({
       {/* 手势层要挪一整个滚动容器（位移写在它自己身上），所以外面必须有一层只负责裁剪的包装：
           被 transform 的后代会计入滚动溢出区域，写在内层网格上会污染 scrollWidth 与边缘判定。
           两层都是 `flex flex-col` + `min-h-0 flex-1`，尺寸分配与改动前等价（见任务基线文件）。 */}
-      <div data-schedule-swipe-stage className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div ref={zoomStageRef} data-schedule-swipe-stage data-schedule-zoom-stage className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div
           ref={scrollRef}
           data-schedule-scroll

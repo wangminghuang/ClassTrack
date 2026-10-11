@@ -13,6 +13,69 @@ export type CellLayoutJob = {
 }
 
 /**
+ * 从一个课程格按钮上构造测量作业。
+ *
+ * 作业原本内联在 `ScheduleCourseCell` 的 `useLayoutEffect` 里，抽出来是为了让
+ * 「真实格子」和「离屏预热克隆」共用同一份测量规则：两条路径一旦各写一份，缓存里
+ * 的数字就不再等于真实格子能排出来的结果。
+ *
+ * 元素靠 data 属性定位（`data-course-content` / `data-course-block` / `data-course-*`），
+ * 因此克隆只需要照抄 HTML 结构，不需要在 React 侧再传一遍 ref。
+ *
+ * @param button 课程格按钮（真实格子或离屏克隆里的同构节点）。
+ * @returns 读写作业；缺少内容容器或文字块时返回 `null`（结构不对，宁可不测）。
+ */
+export function createCellLayoutJob(button: HTMLElement): CellLayoutJob | null {
+  const content = button.querySelector<HTMLElement>('[data-course-content]')
+  const block = button.querySelector<HTMLElement>('[data-course-block]')
+  if (!content || !block) return null
+
+  const name = button.querySelector<HTMLElement>('[data-course-name]')
+  const room = button.querySelector<HTMLElement>('[data-course-room]')
+  const parity = button.querySelector<HTMLElement>('[data-course-parity]')
+  const teacher = button.querySelector<HTMLElement>('[data-course-teacher]')
+  const note = button.querySelector<HTMLElement>('[data-course-note]')
+  const optional = [note, teacher, parity]
+
+  return {
+    prepare: () => {
+      for (const el of optional) {
+        if (el) el.style.display = ''
+      }
+      button.style.removeProperty('--cc-scale')
+      block.style.width = ''
+      // 标签仍由 CSS 决定桌面隐藏；教师/备注有空间时展开。
+      for (const el of [teacher, note]) {
+        if (el) el.style.display = 'block'
+      }
+    },
+    overflows: () => content.scrollHeight > content.clientHeight + 1,
+    hideOptional: (index) => {
+      const el = optional[index]
+      if (el) el.style.display = 'none'
+    },
+    setScale: (scale) => button.style.setProperty('--cc-scale', String(scale)),
+    readUsedWidth: () => {
+      let used = 0
+      for (const el of [parity, name, room, teacher, note]) {
+        if (!el || el.style.display === 'none' || getComputedStyle(el).display === 'none') continue
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        for (const rect of range.getClientRects()) {
+          if (rect.height > 1) used = Math.max(used, rect.width)
+        }
+      }
+      return used
+    },
+    // 必须夹在容器内：(Python) 等 token 不降低 min-content。
+    setWidth: (width) => {
+      block.style.width = width > 0 ? `min(${width}px, 100%)` : ''
+    },
+    widthOverflows: () => block.scrollWidth > block.clientWidth + 1,
+  }
+}
+
+/**
  * 把一份预计算快照套用到一个课程格上 —— **纯写路径，不读任何 DOM**。
  *
  * 与 `fitCourseCells()` 的关系是「同一套写法的重放」：那里也是先 `prepare()` 清掉上一轮的
@@ -66,29 +129,48 @@ export function fitCourseCells(jobs: CellLayoutJob[]): void {
 }
 
 /**
+ * 测量冻结标记：为真时 `cellLayoutQueue` 只攒作业、不排帧。
+ *
+ * 双指缩放的前半程整段冻结测量 —— 手势期每帧改列宽会让每个课程格的 `ResizeObserver`
+ * 触发一次，进而每帧都读一遍 `scrollHeight`（强制布局）。冻结期把这一串动作推迟到
+ * 落定那一刻一次性完成，手势帧里因此只剩样式写入。
+ */
+let suspended = false
+
+/**
  * 合并同一格的内容、首帧、尺寸与字体通知；清理时移除待执行的旧闭包。
+ *
  * @param requestFrame 请求下一绘制帧（SSR 导入时不访问 window）。
  * @param cancelFrame 取消无待测格子的绘制帧。
  * @param fit 批量适配函数，测试可注入确定性的观测点。
- * @returns 可入队和撤销的课程格测量队列。
+ * @param isSuspended 询问当前是否处于冻结期，测试可注入。
+ * @returns 可入队、撤销并在恢复后补刷的课程格测量队列。
  */
 export function createCellLayoutQueue(
   requestFrame: (callback: () => void) => number,
   cancelFrame: (id: number) => void,
-  fit: (jobs: CellLayoutJob[]) => void = fitCourseCells
+  fit: (jobs: CellLayoutJob[]) => void = fitCourseCells,
+  isSuspended: () => boolean = () => suspended
 ) {
   const pending = new Set<CellLayoutJob>()
   let frame: number | null = null
+  const schedule = () => {
+    if (frame !== null) return
+    frame = requestFrame(() => {
+      frame = null
+      // 冻结期在帧回调里也要挡住：入队时还没挂起、回调执行时已经挂起的那种边界。
+      // 此时不清 `pending`，这些作业留给 `flush()` 在恢复后补刷。
+      if (isSuspended()) return
+      const jobs = [...pending]
+      pending.clear()
+      fit(jobs)
+    })
+  }
   return {
     enqueue(job: CellLayoutJob) {
       pending.add(job)
-      if (frame !== null) return
-      frame = requestFrame(() => {
-        frame = null
-        const jobs = [...pending]
-        pending.clear()
-        fit(jobs)
-      })
+      if (isSuspended()) return
+      schedule()
     },
     remove(job: CellLayoutJob) {
       pending.delete(job)
@@ -97,6 +179,11 @@ export function createCellLayoutQueue(
         frame = null
       }
     },
+    /** 把挂起期间攒下的格子排进下一帧；已有待执行帧或没有作业时什么都不做。 */
+    flush() {
+      if (pending.size === 0) return
+      schedule()
+    },
   }
 }
 
@@ -104,3 +191,24 @@ export const cellLayoutQueue = createCellLayoutQueue(
   (callback) => window.requestAnimationFrame(callback),
   (id) => window.cancelAnimationFrame(id)
 )
+
+/**
+ * 冻结课程格测量：此后入队的格子只攒不刷，直到 {@link resumeCellLayout}。
+ *
+ * 成对调用由 `useScheduleZoom` 负责（手势进入预览时冻结、落定时恢复）。冻结期内的作业
+ * 不会丢：恢复时会连带把攒下的格子一起排进下一帧，所以「预览期间内容变了」也能补上。
+ */
+export function suspendCellLayout(): void {
+  suspended = true
+}
+
+/**
+ * 恢复课程格测量，并把冻结期间攒下的格子一次性排进下一帧。
+ *
+ * 恢复与补刷绑在一个入口里，避免出现「恢复了测量但忘了补刷」这种只丢一次适配、
+ * 事后极难发现的组合。
+ */
+export function resumeCellLayout(): void {
+  suspended = false
+  cellLayoutQueue.flush()
+}

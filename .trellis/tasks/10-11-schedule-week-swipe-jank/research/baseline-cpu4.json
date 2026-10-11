@@ -1,0 +1,70 @@
+{
+  "cpuRate": 4,
+  "environment": {
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+    "width": 412,
+    "height": 731,
+    "cells": 18
+  },
+  "runs": [
+    {
+      "direction": "previous",
+      "before": 3,
+      "after": 2,
+      "release": 2365.2000000029802,
+      "weekChanges": [
+        {
+          "t": 2488.5,
+          "week": 2
+        }
+      ],
+      "maxFrameGap": 16.700000000000273,
+      "longTasks": [],
+      "finalState": "switching",
+      "transform": "translate3d(-64px, 0px, 0px)",
+      "opacity": "0.35",
+      "frameGaps": [
+        {
+          "start": 2355.2,
+          "end": 2371.9,
+          "gap": 16.700000000000273
+        },
+        {
+          "start": 2371.9,
+          "end": 2388.5,
+          "gap": 16.59999999999991
+        },
+        {
+          "start": 2388.5,
+          "end": 2405.2,
+          "gap": 16.699999999999818
+        },
+        {
+          "start": 2405.2,
+          "end": 2421.9,
+          "gap": 16.700000000000273
+        },
+        {
+          "start": 2421.9,
+          "end": 2438.6,
+          "gap": 16.699999999999818
+        },
+        {
+          "start": 2438.6,
+          "end": 2455.2,
+          "gap": 16.59999999999991
+        },
+        {
+          "start": 2455.2,
+          "end": 2471.8,
+          "gap": 16.600000000000364
+        },
+        {
+          "start": 2471.8,
+          "end": 2488.5,
+          "gap": 16.699999999999818
+        }
+      ]
+    }
+  ]
+}

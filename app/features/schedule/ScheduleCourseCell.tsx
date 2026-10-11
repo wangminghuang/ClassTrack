@@ -4,14 +4,9 @@ import type { Class, ClassMark } from '~/lib/types'
 import { cn } from '~/lib/utils'
 import { useScheduleDisplayStore } from '~/store/scheduleDisplayStore'
 import { isAttendanceMarked } from '~/store/utils'
-import {
-  CELL_ABSENT_RING_CLASS,
-  CELL_ATTENDED_RING_CLASS,
-  CELL_BADGE_CLASS,
-  CELL_FALLBACK_SCALES,
-  CELL_FONT_CLASS,
-  CELL_RING_CLASS,
-} from './cellScale'
+import { cellLayoutQueue } from './cellLayout'
+import type { CellLayoutJob } from './cellLayout'
+import { CELL_ABSENT_RING_CLASS, CELL_ATTENDED_RING_CLASS, CELL_BADGE_CLASS, CELL_FONT_CLASS, CELL_RING_CLASS } from './cellScale'
 import type { CourseColorTheme } from './courseColor'
 import { getWeekParityLabel } from './utils'
 
@@ -68,113 +63,82 @@ export default function ScheduleCourseCell({ course, mark, theme, attendanceEnab
   const teacherRef = useRef<HTMLSpanElement>(null)
   const noteRef = useRef<HTMLSpanElement>(null)
 
-  /**
-   * 按格子实际可用高度决定可选行显示到哪一级。
-   *
-   * **字号不在这里决定**。改动前本函数还负责「把课名与教室的字号按 px 硬减两档」，
-   * 那是「同屏有的格子正常、有的缩水」的根源：档位判据是视口布尔值（`isMobile`）而不是
-   * 格子尺寸，而且它把行高从 1.2 改成 1.05，放大了落差。现在字号完全由 `cellScale.ts`
-   * 的容器单位公式算出来（同尺寸必然同字号），本函数只做两件事：
-   *
-   * 1. **整行丢弃**弹性行，按 **备注 → 教师 → 单双周** 的顺序（丢完仍放不下则进入第 2 步）；
-   * 2. **兜底缩放**：按相对比例逐档乘 `--cc-scale`（不再按 px 硬减）。
-   *
-   * 课名与教室是硬要求：任何尺寸下都不丢弃，只参与兜底缩放。缩到 8px 下限仍放不下时
-   * 停手，接受已确认的已知限制（1 节矮格 + 超长课名，见 `mobile-schedule-layout.md`），
-   * 但**绝不水平溢出**。
-   *
-   * 直接写 `style` 而不是 setState：测量与渲染不会互相触发，也不会每格多渲染一次。
-   */
+  // 内容变更才重建测量任务；配色/出勤角标/回调变化不影响文字盒子。
   useLayoutEffect(() => {
     const content = contentRef.current
     const button = buttonRef.current
-    if (!content || !button) return
+    const block = blockRef.current
+    if (!content || !button || !block) return
 
-    /** 溢出量（px）；容差 1px 吸收亚像素误差。 */
-    const overflow = () => content.scrollHeight - content.clientHeight
-
-    const apply = () => {
-      const name = nameRef.current
-      const room = roomRef.current
-      const block = blockRef.current
-      const parity = parityRef.current
-      const teacher = teacherRef.current
-      const note = noteRef.current
-
-      // 每轮都从基准状态重新测量：先清掉上一轮的内联覆盖，让 class 上的断点规则与
-      // 容器单位重新生效。`--cc-scale` 也必须清掉，否则上一轮的兜底会粘住。
-      for (const el of [parity, teacher, note]) {
-        if (el) el.style.display = ''
-      }
-      button.style.removeProperty('--cc-scale')
-      if (block) block.style.width = ''
-
-      // 教师与备注在 class 上是 `hidden`（无 JS 时保持保守态），由这里在有空间时打开；
-      // 单双周不参与这一步：它的可见性由 CSS 断点决定（`block md:hidden`，桌面端为 none），
-      // JS 只在空间不够时关掉它。这样判据里不再需要任何视口布尔值。
-      for (const el of [teacher, note]) {
-        if (el) el.style.display = 'block'
-      }
-
-      // 优先级从低到高逐个丢弃：备注 → 教师 → 单双周。
-      // 用 `display: 'none'` 而不是清空内联值：单双周的自然态是 `block`（手机端），
-      // 清空内联值无法把它藏起来。
-      for (const el of [note, teacher, parity]) {
-        if (!el) continue
-        if (overflow() <= 1) break
-        el.style.display = 'none'
-      }
-
-      // 兜底：按相对比例缩小字号（所有字号行同步缩，保持行间层级）。
-      // 下限写在 CSS 侧 `clamp()` 的第一位，所以缩到底也不会突破可读下限。
-      for (const scale of CELL_FALLBACK_SCALES) {
-        if (overflow() <= 1) break
-        button.style.setProperty('--cc-scale', String(scale))
-      }
-
-      // 内层块收窄到「实际用到的最大行宽」：手机端由外层 `items-center` 居中，桌面端
-      // （`md:items-start`）靠左对齐。逐行 `text-center` 会把每行都居中、长课名更难读，所以统一走块内左对齐。
-      if (!block) return
-      let used = 0
-      for (const el of [parity, name, room, teacher, note]) {
-        if (!el || el.style.display === 'none' || getComputedStyle(el).display === 'none') continue
-        const range = document.createRange()
-        range.selectNodeContents(el)
-        for (const rect of range.getClientRects()) {
-          if (rect.height > 1) used = Math.max(used, rect.width)
+    const name = nameRef.current
+    const room = roomRef.current
+    const parity = parityRef.current
+    const teacher = teacherRef.current
+    const noteElement = noteRef.current
+    const optional = [noteElement, teacher, parity]
+    const job: CellLayoutJob = {
+      prepare: () => {
+        for (const el of optional) {
+          if (el) el.style.display = ''
         }
-      }
-      if (used <= 0) return
-      // **必须夹在容器内**：`overflow-wrap: break-word` 不降低 min-content，像 `(Python)`
-      // 这种不可断 token 的 min-content 可能比内边距盒还宽，块被撑出卡片后只能压到描边上。
-      block.style.width = `min(${Math.ceil(used)}px, 100%)`
-      // 宽度或高度任一不满足就退回整宽——宁可偏左，也绝不溢出。
-      if (overflow() > 1 || block.scrollWidth > block.clientWidth + 1) block.style.width = ''
+        button.style.removeProperty('--cc-scale')
+        block.style.width = ''
+        // 标签仍由 CSS 决定桌面隐藏；教师/备注有空间时展开。
+        for (const el of [teacher, noteElement]) {
+          if (el) el.style.display = 'block'
+        }
+      },
+      overflows: () => content.scrollHeight > content.clientHeight + 1,
+      hideOptional: (index) => {
+        const el = optional[index]
+        if (el) el.style.display = 'none'
+      },
+      setScale: (scale) => button.style.setProperty('--cc-scale', String(scale)),
+      readUsedWidth: () => {
+        let used = 0
+        for (const el of [parity, name, room, teacher, noteElement]) {
+          if (!el || el.style.display === 'none' || getComputedStyle(el).display === 'none') continue
+          const range = document.createRange()
+          range.selectNodeContents(el)
+          for (const rect of range.getClientRects()) {
+            if (rect.height > 1) used = Math.max(used, rect.width)
+          }
+        }
+        return used
+      },
+      // 必须夹在容器内：(Python) 等 token 不降低 min-content。
+      setWidth: (width) => {
+        block.style.width = width > 0 ? `min(${width}px, 100%)` : ''
+      },
+      widthOverflows: () => block.scrollWidth > block.clientWidth + 1,
     }
-
     let cancelled = false
     const measure = () => {
-      if (!cancelled) apply()
+      if (!cancelled) cellLayoutQueue.enqueue(job)
     }
+    // 下一绘制帧统一适配所有格子，保留首次布局定稿后的纠偏。
+    measure()
+    if (document.fonts?.status === 'loading') void document.fonts.ready.then(measure)
+    document.fonts?.addEventListener('loadingdone', measure)
 
-    apply()
-
-    // 首帧测完还不够可靠：挂载那一刻网格行高常常还没被 1fr 分配定稿（量到的是内容自然高，
-    // 于是误判「放得下」），中文字体也可能晚到改变换行；两者都不会触发按钮尺寸变化，
-    // 只靠 ResizeObserver 会一直用错误的结论。所以补两拍：下一帧、以及字体就绪后各重测一次。
-    const raf = requestAnimationFrame(measure)
-    void document.fonts?.ready.then(measure)
-
-    // 格子尺寸由网格与缩放决定（内容改动不会改变外层按钮尺寸），因此观察按钮即可在
-    // 缩放、旋屏、窗口尺寸变化后重新测量。
-    const observer = new ResizeObserver(measure)
+    let lastWidth: number | undefined
+    let lastHeight: number | undefined
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return
+      const { width, height } = entry.contentRect
+      if (width === lastWidth && height === lastHeight) return
+      lastWidth = width
+      lastHeight = height
+      measure()
+    })
     observer.observe(button)
     return () => {
       cancelled = true
-      cancelAnimationFrame(raf)
+      cellLayoutQueue.remove(job)
+      document.fonts?.removeEventListener('loadingdone', measure)
       observer.disconnect()
     }
-  })
+  }, [course.name, course.classroom, course.teacher, parityLabel, note])
 
   return (
     <button

@@ -208,9 +208,11 @@ export function getDetailLevel(zoom: number): 'compact' | 'standard' | 'full'
 
 - 直接写 `style.display` 与 `--cc-scale`，**不要** setState —— 测量与渲染不会互相触发，也不会每格多渲染一次。
 - 每轮 apply 先清掉上一轮的内联覆盖（`display` 与 `--cc-scale` 都要清）。单双周标签的桌面端隐藏靠 CSS 的 `md:hidden`——**内联样式会压过它**，所以只在空间不够时写 `display: none`，绝不在手机端把它写成 `display: block`。
-- 依赖 `ResizeObserver` 观察**外层格子按钮**（尺寸由网格与缩放决定，内容变化不会改动它）来在缩放 / 旋屏 / 窗口变化后重测；观察内容元素本身会因为自身尺寸变化互相触发。
+- 依赖 `ResizeObserver` 观察**外层格子按钮**（尺寸由网格与缩放决定，内容变化不会改动它）来在缩放 / 旋屏 / 窗口变化后重测；观察内容元素本身会因为自身尺寸变化互相触发。回调里先比对 `contentRect` 宽高，**尺寸没真变就不入队**（`observe()` 会立刻回调一次，与首测重复）。
 - 实测口径：`content.scrollHeight <= content.clientHeight + 1`（1px 亚像素容差）。
-- **首帧一次测量不够**：挂载那一刻网格行高还没被 `1fr` 分配定稿（量到的是内容自然高 → 误判「放得下」），中文字体也可能晚到改变换行——两者都不会触发按钮尺寸变化，`ResizeObserver` 不会补跑。因此 `apply()` 之后必须在 `requestAnimationFrame` 与 `document.fonts.ready` 各补测一次（否则长课名格溢出被裁）。
+- **测量必须走共享队列批量执行**（`app/features/schedule/cellLayout.ts`）：关掉 `useLayoutEffect` 的依赖数组（`}, [course.name, course.classroom, course.teacher, parityLabel, note])`），只在**内容**变化时重建任务；配色 / 出勤角标 / 回调引用变化不得触发重测。挂载、`ResizeObserver`、字体就绪三类通知按格去重后合并成**同一帧一次**批量适配（`cellLayoutQueue`）。首帧与字体晚到的纠偏能力保留：挂载即入队（下一绘制帧统一 apply），字体仍在加载时补一次 `document.fonts.ready`，并监听 `document.fonts` 的 `loadingdone`。
+- **同一次批量里必须分阶段读写，不能逐格交错**：`prepare`（写基准样式）→ 读溢出 → `hideOptional`（写丢行）→ 读溢出 → `setScale`（写兜底）→ 读溢出 → 读各行实测宽度 → 写块宽 → 再读一次决定是否退回整宽。轮数与阶段固定，不随课程格数量增长。
+- **反例（2026-10-11 实测）**：每格在自己的 `useLayoutEffect` 里同步「写 display → 读 `scrollHeight`」地 apply，翻周时新课程格集中挂载会在主线程产生 672–824ms 长任务、松手切周动画卡住 1.0–1.3s（Chrome 155 / 412×731 / 18 格，证据见任务 `10-11-schedule-week-swipe-jank`）。批量 + 内容依赖后同一场景无 ≥50ms 长任务、最大帧间隔 33.5–50ms（多次复跑）。
 - **水平**居中：每轮实测「最长行宽」，把内层块 `style.width` 设为 `min(该宽度, 100%)`，外层 `items-center` 负责居中；收窄后若高度或宽度任一不满足则把宽度还原成整宽，**宁可偏左也不裁字**。**必须夹 `100%`**：`overflow-wrap: break-word` 不降低 min-content，`(Python)` 这类不可断 token 的 min-content 可能比内边距盒还宽，不夹就会把块撑出卡片、压到描边上。
 - **垂直**顶部对齐（`justify-start`），**不做垂直居中**：1 行内容的格子与 7 行内容的格子必须从同一条顶边起排，否则同一屏里每格的起始高度都不一样。超长内容向下溢出被卡片裁剪，顶部始终可见。
 
@@ -407,6 +409,19 @@ agent-browser eval "String(document.querySelectorAll('[data-course-cell]').lengt
 - `device-diagnostics.mjs` —— **设备侧一键诊断**：`--print-snippet` 打印可贴进 WebView devtools 的自包含表达式，
   给 CDP ws url 则直接输出判定（`ok` / `needs-no-scroll` / `layout-anchor` / `scroll-disabled` / `touch-layer`）。
   遇到「滑不动」先用它定位到层，别直接改 CSS。
+
+### 松手切周性能与课程格适配验收（2026-10-11 起）
+
+`.trellis/tasks/10-11-schedule-week-swipe-jank/research/`：
+
+- `week-switch-perf.mjs` + `run-browser-perf.sh` —— 用 CDP `Input.dispatchTouchEvent` 在**生产构建**上做左右各 3 次真实横滑，
+  用 `touchend` 打松手时刻、`requestAnimationFrame` 采帧、`PerformanceObserver(['longtask'])` 采长任务，
+  并顺手断言「一次手势只切一周 / 结束后 `data-week-swipe-state === 'idle'`、内联 transform 与 opacity 为空」。
+  `PERF_ASSERT=1` 时要求松手后 400ms 窗口内无 ≥50ms 长任务，`PROFILE=1` 时另存 `.cpuprofile`。
+  用法：`PERF_ASSERT=1 bash research/run-browser-perf.sh 1 <out.json>`（第 2 个参数是 `Emulation.setCPUThrottlingRate`，4 表示压力对照）。
+- `verify-cell-layout.mjs` + `run-cell-layout-verify.sh` —— 360 / 412 / 1440 三个视口 × 1x/2x × 跨周，逐格断言
+  「教室恒显、可丢行顺序不倒挂、字号在 8–15px、文字块不宽于容器且不水平溢出、内容溢出必须已走兜底」。
+  改课程格测量后必跑；历史基线 18 格三视口全绿。
 ---
 
 ## Common Mistakes
@@ -442,3 +457,6 @@ agent-browser eval "String(document.querySelectorAll('[data-course-cell]').lengt
 - 复位时写 `translate3d(0px, 0, 0)` 而不清空内联值：会留下「有 transform」的残留状态（`getComputedStyle` 返回 matrix 而不是 `none`），自动化判据与后续手势的起点都会被误导。`reset()` 必须把 `transform` / `opacity` / `transition` 三个内联值都清空。
 - 让 `pointercancel` 参与双击判定（或只看两次抬起点的距离）：连续两次横滑会被判成双击、缩放档位来回切换。除了不让 cancel 参与，`pointerup` 还要过「按下点 → 抬起点」的位移校验。
 - 拖动期间用 React state 驱动位移（`setTranslateX`）：7×12 网格会每帧重渲染。跟手阶段只写 DOM 内联样式，松手才提交一次周次。
+- 让课程格在自己的 `useLayoutEffect` 里同步「写 display / 字号 → 读 `scrollHeight`」地适配：翻周时新课程格集中挂载，每次读写都强制整张网格重排。实测松手切周产生 672–824ms 主线程长任务、动画卡住 1.0–1.3s（Chrome 155 / 412×731 / 18 格）。必须走 `cellLayout.ts` 的共享队列，分阶段批量读写。
+- 给课程格测量 effect 留空依赖数组（`}` 后不带 `[...]`）：每次 render 都重建任务并入队，配色 / 出勤角标 / 回调引用变化都会触发全网格重测。依赖只写**内容**（`course.name` / `classroom` / `teacher` / `parityLabel` / `note`）。
+- 在 `ResizeObserver` 回调里不比对尺寸直接入队：`observe()` 会立刻回调一次，与首帧测量重复；回调必须先比较 `contentRect` 宽高，没真变就不入队。

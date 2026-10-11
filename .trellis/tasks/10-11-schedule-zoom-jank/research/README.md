@@ -23,6 +23,7 @@ Chrome 155（headless，`--executable-path /usr/bin/google-chrome`）跑**生产
 - `zoom-perf.mjs` —— 探针本体，四种模式（真实触摸 / 合成扫档 / 控制组 / 预览路径）。
 - `profile-attrib.mjs` —— 把 `.cpuprofile` 的自身耗时按函数与来源模块聚合。
 - `run-zoom-perf.sh` —— 一键起服务、灌夹具、连 CDP、跑探针。
+- `verify-zoom-rest.mjs` / `run-zoom-rest.sh` —— 静止态与减少动效的验收断言（AC3 / AC4，见 §8）。
 
 ## 2. 基线：卡顿确实在手势期间
 
@@ -119,3 +120,31 @@ Chrome 155（headless，`--executable-path /usr/bin/google-chrome`）跑**生产
 **代价被搬到了落定那一帧**：松手后 600ms 窗口里出现一次 55–154ms 的长任务（基线同窗口是零长任务）。
 原因是手势期不再改宽度，落定帧于是同时承担「改宽度 + 18 格各跑一遍 `fitCourseCells`」。
 这正是 P4（落定套用预计算排布）要消灭的那一下，读数留在这里作为 P3/P4 的对照基线。
+
+## 8. 实现后复测：P3 里程碑（落定过渡 + 三入口）
+
+静止态与降级的判据（AC3 / AC4）由 `verify-zoom-rest.mjs` 断言，一键复跑：
+
+```bash
+bash .trellis/tasks/10-11-schedule-zoom-jank/research/run-zoom-rest.sh /tmp/claude/zoom-rest.json
+```
+
+读数见 `zoom-rest.json`。12 项静止态检查全过（正常动效 9 项 + 减少动效 3 项）：
+
+| 条目 | 断言要点 |
+| --- | --- |
+| 双指捏合 1x→1.5x | 手势期 `preview` + 有内联 `transform` + `--schedule-zoom` 仍为 1；松手瞬间 `settling` 且宽度**仍**冻结在起始档位 |
+| 双指捏合 1x→2x | 预览比例已等于目标比例 ⇒ 无过渡可播，松手同步落定（`settling` 不出现），但模糊仍延后一个绘制帧才淡出 |
+| 双指捏合（真实触摸，CDP） | 端到端终态：tier=2、网格宽 758px、`scrollLeft=198` |
+| `+` / `−` 连点四次 | 1 → 1.5 → 2 → 1.5 → 1，每次点击都同步进入 `settling` |
+| 双击 | 1 ↔ 2，同步进入 `settling` |
+| reduce × 3 | 捏合 / 按钮 / 双击都「点下去就落定」（同步读到 `settling` 为 null），且手势期全程无模糊 |
+
+每个用例的静止态判据都是同一组：stage 与滚容器的内联 `transform` / `filter` / `transition` 全空、
+stage 计算 `transform` 与 `filter` 都是 `none`、`data-schedule-zoom-preview` 不存在、
+`data-zoom-level` 与 `--schedule-zoom` 都等于目标档位、网格实际宽度等于「档位 × 滚容器宽度」
+（误差 ≤1px）、控件读数与档位一致。
+
+> 脚本里两处刻意的做法：相位读取用**同步派发**的 `PointerEvent`（真实触摸必须经过 CDP 往返，
+> 读到的是往返之后的状态，无法稳定断言「过渡正在播」）；`resetToBase()` 用 `Page.reload`
+> 复位（缩放值不持久化，reload 即回 1x）。真实触摸路径另有一条端到端用例只验终态。

@@ -1,0 +1,103 @@
+# 研究记录：手机课表捏合缩放卡顿（2026-10-11）
+
+本目录记录 **10-11-schedule-zoom-jank** 的基线测量、控制组与设计依据。所有读数来自本机
+Chrome 155（headless，`--executable-path /usr/bin/google-chrome`）跑**生产构建** + CDP 真实触摸事件，
+课程数据是归档的**合成夹具**（18 格，无任何真实用户数据）。
+
+## 1. 被测对象与复现口径
+
+| 项 | 值 |
+| --- | --- |
+| 应用资产 | `pnpm build` 产物，`python3 -m http.server` 托管 `build/client`（SPA，直接吃生产 CSS/JS） |
+| 引擎 | HeadlessChrome 155，412×731 CSS px / DPR 2 |
+| 种子 | 归档夹具 `09-20-mobile-schedule-week-grid/research/seed-schedule-fixture.js`，18 格、网格宽 379px |
+| 手势 A | CDP `Input.dispatchTouchEvent`：`touchStart` 两指 → 40 步 `touchMove` 反向拉开/收拢 → `touchEnd` |
+| 手势 B | 页内 rAF 循环，1000ms 内把 `--schedule-zoom` 从 1 线性推到 2（或反向），还原「每帧改宽度」的驱动 |
+| 采集 | `requestAnimationFrame` 采帧、`PerformanceObserver(['longtask'])` 采长任务、`MutationObserver` 数课程格 `style` 写入 |
+| 判据 | 手势期间（未松手窗口）的最大帧间隔与 ≥50ms 长任务；同时断言松手后吸附到预期档位 |
+
+一键复跑：`bash research/run-zoom-perf.sh 1 <out.json> both`（第 2 参数是 CPU 降速倍率，第 4 参数 `touch`/`sweep`/`control`/`preview`）。
+
+工具：
+
+- `zoom-perf.mjs` —— 探针本体，四种模式（真实触摸 / 合成扫档 / 控制组 / 预览路径）。
+- `profile-attrib.mjs` —— 把 `.cpuprofile` 的自身耗时按函数与来源模块聚合。
+- `run-zoom-perf.sh` —— 一键起服务、灌夹具、连 CDP、跑探针。
+
+## 2. 基线：卡顿确实在手势期间
+
+`PERF` 生产构建，rate=1，读数见 `baseline.json`：
+
+| 手势 | 手势期间帧数 | 最大帧间隔 | p95 帧间隔 | 最重长任务 | ≥50ms 长任务数 | 课程格 style 写入 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 捏开 1x→2x | 120 | **200ms** | 150ms | **202ms** | 35 | 101 |
+| 捏拢 2x→1x | 121 | 66.7ms | 50ms | 63ms | 8 | 110 |
+| 捏开 1x→2x | 123 | 166.7ms | 133.4ms | 167ms | 57 | 101 |
+| 捏拢 2x→1x | 125 | **200ms** | 133.4ms | 187ms | 64 | 110 |
+
+松手后 800ms 窗口：帧间隔 16.8ms、**零长任务**（四轮一致）。⇒ 卡顿全在**手势期间**，
+松手提交本身没有问题 —— 与用户「缩放的时候会实时重新渲染文字排布，很卡」的描述一致。
+
+合成扫档（同样的 1x→2x 跨度，1400ms 窗口）只画出 31 / 15 帧（应约 84 帧），最重长任务 180 / 189ms。
+
+## 3. 归因：热点是 `overflows()` 的强制布局，占 67% 采样
+
+`PROFILE=1` 跑扫档后 `profile-attrib.mjs` 的按函数自身耗时（总窗口 3089ms）：
+
+| 函数 | 自身耗时 | 占比 |
+| --- | --- | --- |
+| `overflows`（`content.scrollHeight > content.clientHeight + 1`） | **2079.7ms** | **67.3%** |
+| `(idle)` | 694.0ms | 22.5% |
+| `(program)` | 227.5ms | 7.4% |
+| `readUsedWidth` | 9.3ms | 0.3% |
+| `getClientRects` | 8.2ms | 0.3% |
+
+机理：`fitCourseCells`（`cellLayout.ts`）每个阶段都是「先写 DOM、再读 `scrollHeight`」——
+首轮 1 次 + 丢弃行最多 3 轮 + 兜底阶梯最多 5 轮 = **每轮适配最多 9N 次强制布局**（18 格 → 162 次/帧）。
+每次读都会把「写 display / 写 `--cc-scale`」的失效状态同步刷成一次整表重排。
+
+这正是 `10-11-schedule-week-swipe-jank` 修过的同一类热点：那次修的是**松手切周**（新课程格集中挂载），
+捏合路径没被覆盖；本次改写的是手势期每帧都跑同一套适配。
+
+## 4. 控制组：把「JS 测量」与「引擎自身换行」分开
+
+方法：把 `[data-schedule-grid]` 克隆到一个离屏 `visibility:hidden` 宿主里（克隆没有任何
+`ResizeObserver`/测量任务），再对它做同样的 `--schedule-zoom` 扫档；可选叠加 `filter: blur(Npx)`。
+只用离屏克隆，不碰真实网格，用完即删。
+
+| 场景（1400ms 窗口，1x→2x） | 帧数 | 最大帧间隔 | 最重长任务 | ≥50ms 长任务数 |
+| --- | --- | --- | --- | --- |
+| 真实路径（含 JS 测量） | 31 | 200ms | 189ms | 多 |
+| 离屏克隆 · blur 0（零 JS 测量） | 51 | 66.6ms | 56ms | 6 |
+| 离屏克隆 · blur 2px | 51 | 66.6ms | 63ms | 3 |
+| 离屏克隆 · blur 4px | 53 | 50ms | 51ms | 2 |
+
+结论一：**冻结 JS 测量约拿回 3 倍**（最重长任务 189ms → 56ms）。
+结论二：**模糊滤镜本身在噪声内**（0/2/4px 三档读数不可区分）——「动画期间加模糊」不额外付费。
+结论三：即使 JS 归零，「真实改宽度 + 引擎重排」在这套环境里也只有 **~36fps（51/1400ms）**，
+到不了顺滑。⇒ 只靠「冻结测量」不够，需要一条不经重排的路径。
+
+## 5. 预览路径：合成层 transform 是唯一满帧方案
+
+同一个离屏克隆，改的是 `transform: translateX(xc·(1−k)) scaleX(k)`（把捏合中心钉在原地）
+而不是宽度；`translate`/`scale` 都是合成器属性，不触发布局。
+
+| 场景（1400ms 窗口，1x→2x） | 帧数 | 最大帧间隔 | 最重长任务 | ≥50ms 长任务数 |
+| --- | --- | --- | --- | --- |
+| transform 预览（无模糊） | **84 = 满帧** | **16.8ms** | **0** | **0** |
+| transform 预览 + 3px 模糊 | **84 = 满帧** | **16.8ms** | **0** | **0** |
+
+⇒ 设计结论：**手势期走 transform 预览（零重排），松手后把真实排布一次性落定**。
+`scaleX` 只拉伸横向，与「缩放只改列宽」的语义同构（行高不变）；文字形变的失真由动画期间的
+模糊掩盖，落定帧清晰。
+
+## 6. 探针的已知局限
+
+- LoAF（`long-animation-frame`）条目的 `styleAndLayoutDuration` 在本机取不到（序列化后为
+  `undefined` → JSON 成 `null`），因此「样式+布局时长」这一列不可用；JS 归属只能靠
+  `.cpuprofile` 的函数自身耗时（§3）。
+- `visibility: hidden` 的克隆不参与绘制，因此控制组读数**只含样式重算与布局**、不含栅格化。
+  这不影响 §4 的结论方向（它给出的是「引擎重排」的**下界**），但意味着真机 GPU 上的绝对帧率
+  会优于本机数字。
+- 本机是桌面 Chrome + 软件栅格化，**不能替代真机结论**。本次结论都写成同环境内的相对比较
+  （同夹具、同视口、同引擎、同 CPU 速率）。

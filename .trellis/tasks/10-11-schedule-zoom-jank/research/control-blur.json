@@ -1,0 +1,113 @@
+{
+  "cpuRate": 1,
+  "environment": {
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+    "width": 412,
+    "height": 731,
+    "cells": 18,
+    "gridWidth": 379
+  },
+  "touch": [],
+  "sweep": [],
+  "control": [
+    {
+      "blurRadius": 0,
+      "span": "1x→2x",
+      "mounted": {
+        "width": 379,
+        "cells": 18
+      },
+      "window": {
+        "frames": 51,
+        "maxFrameGap": 66.59999999999991,
+        "p95FrameGap": 50,
+        "longTasks": [
+          50,
+          55,
+          53,
+          52,
+          52,
+          56
+        ],
+        "worstLongTask": 56,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": 6,
+        "loafCount": 6,
+        "styleWrites": 0
+      }
+    },
+    {
+      "blurRadius": 2,
+      "span": "1x→2x",
+      "mounted": {
+        "width": 379,
+        "cells": 18
+      },
+      "window": {
+        "frames": 51,
+        "maxFrameGap": 66.59999999999991,
+        "p95FrameGap": 50.100000000000364,
+        "longTasks": [
+          55,
+          54,
+          63
+        ],
+        "worstLongTask": 63,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": 11.8,
+        "loafCount": 4,
+        "styleWrites": 0
+      }
+    },
+    {
+      "blurRadius": 4,
+      "span": "1x→2x",
+      "mounted": {
+        "width": 379,
+        "cells": 18
+      },
+      "window": {
+        "frames": 53,
+        "maxFrameGap": 50,
+        "p95FrameGap": 50,
+        "longTasks": [
+          50,
+          51
+        ],
+        "worstLongTask": 51,
+        "styleAndLayoutDuration": null,
+        "blockingDuration": 1.1,
+        "loafCount": 2,
+        "styleWrites": 0
+      }
+    }
+  ],
+  "summary": {
+    "touchWorstFrameGap": 0,
+    "touchWorstLongTask": 0,
+    "touchStyleWrites": 0,
+    "sweepWorstFrameGap": 0,
+    "sweepWorstLongTask": 0,
+    "sweepStyleWrites": 0,
+    "control": [
+      {
+        "blurRadius": 0,
+        "maxFrameGap": 66.59999999999991,
+        "worstLongTask": 56,
+        "frames": 51
+      },
+      {
+        "blurRadius": 2,
+        "maxFrameGap": 66.59999999999991,
+        "worstLongTask": 63,
+        "frames": 51
+      },
+      {
+        "blurRadius": 4,
+        "maxFrameGap": 50,
+        "worstLongTask": 51,
+        "frames": 53
+      }
+    ]
+  }
+}

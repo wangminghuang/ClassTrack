@@ -1004,3 +1004,53 @@ Android 12 上课表滑不动的真因不是手势层，而是 app.css 的 heigh
 - 若设备实测仍滑不动：先跑 research/device-diagnostics.mjs 定位到层（锚点/布局层 / 触摸事件层 / 本来无需滚），再决定改哪里
 - PR #26 待审；合并后观察 CI 的 webview:check-css 与 test:webview-css 两条新检查
 - Android原生生命周期尚需真机验收。
+
+
+## Session 30: 手机课表缩放两段式：手势期合成层预览 + 档位排布预计算与空闲预热
+<!-- trellis-session: v=2 fp=ed18a40147060983 -->
+
+**Date**: 2026-10-11
+**Task**: 手机课表缩放两段式：手势期合成层预览 + 档位排布预计算与空闲预热
+**Branch**: `fix/schedule-zoom-jank`
+
+### Summary
+
+把捏合缩放的实时重排改成「按住时合成层预览、松手后一次性落定」，并让落定读预计算排布：基线 200ms 长任务 + 202ms 最大帧间隔 → 手势期零长任务 / 16.8ms，松手后只剩引擎自重排量级（偶发 52-58ms，零 JS 的离屏克隆对照组同样是 50-56ms）。
+
+### Main Changes
+
+- cellLayout.ts：加挂起闸门（preview/settling 期间冻结课程格测量）、抽出 createCellLayoutJob(button, contentKey)、批次命中即纯写未命中才实测并回读快照、几何读取器 + withCellLayoutScope
+- zoomPreview.ts（纯函数核）：比例→变形换算、档位比、过渡时长/缓动常量、reduce 判定；变换只允许出现在 preview/settling 两个相位、只允许 scaleX + translateX、只允许挂 stage
+- useScheduleZoom.ts：idle→preview→settling→commit 状态机，三条入口（± 按钮 / 双击 / 捏合）统一落定；落定顺序硬点「先声明档位 → 写 --schedule-zoom → 写 scrollLeft → 同帧收变换」
+- cellLayoutCache.ts：三层键（几何 × 内容 × 档位）的排布快照表，命中时零格子测量；内容或几何一改键即变，不需要显式失效
+- zoomWarmup.ts + hooks/useZoomTierWarmup.ts：空闲窗口离屏克隆网格预热两个非当前档位（每片 4 格、任何交互立刻取消、克隆抹掉 data-course-cell 以免污染验收读数）
+- 几何键改为档位无关（滚容器内容宽 × 网格自身高度 × 内联列模板 × 断点）：容器内容盒高度会随水平滚动条在档位间翻转 548↔533，既切碎条目也让预热算不出真实路径的键
+- 规范与守卫：mobile-schedule-layout.md 把「禁等比缩放」改成受控例外并新增「缩放的两段式」「档位排布预计算」两节；scheduleSourceGuard.test.ts 新增 8 条断言钉住边界（8→16 条）
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fc0df30` | docs(trellis): 课表缩放卡顿任务的规划、基线与归因读数 |
+| `55e0b06` | perf(schedule): 抽出缩放两段式的纯函数核与档位排布缓存 |
+| `981e93d` | perf(schedule): 手势期冻结课程格测量，双指缩放改走合成层预览 |
+| `b761e8d` | perf(schedule): 缩放加入落定过渡，± 按钮与双击并入同一条落定路径 |
+| `0afb297` | feat(schedule): 落定期套用预计算排布，命中即零测量 |
+| `3c1e3ac` | perf(schedule): 空闲预热两个非当前档位，首访档位不再当场测量 |
+| `61a3c13` | docs(schedule): 缩放受控例外写进规范，并加源码守卫 |
+| `146aa5b` | docs(trellis): 逐条核验七项验收标准并指到读数文件 |
+
+### Testing
+
+- [OK] 七项门禁全绿：471 tests / 50 files、typecheck、lint、format:check、build、webview:check-css、test:android-assets
+- [OK] 浏览器读数：四轮捏合手势期零长任务、最大帧间隔 16.8ms（基线 202ms）；命中缓存时每个 (几何, 档位) 组合零测量（p4/p5-hit-miss.json）
+- [OK] 三视口（360x794 / 412x731 / 1440x900）× 1x/1.5x/2x 逐格断言 violations 全 0；静止态 12 项全过；切周回归 worstLongTask 0 / worstFrameGap 33.4ms
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 真机验收（本机只有桌面 Chrome / 软件栅格化，真机数字未测）：Android WebView 上复跑 run-zoom-perf.sh 与三档逐格断言
+- 分支 fix/schedule-zoom-jank 未合并，待开 PR 评审

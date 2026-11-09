@@ -192,32 +192,42 @@ export function getDetailLevel(zoom: number): 'compact' | 'standard' | 'full'
 - 档位（`compact` / `standard` / `full`）仍是离散吸附：`snapZoomTier` 在 <1.35 → `compact`、<1.9 → `standard`、其余 `full`。但**档位不再驱动内容显隐**（2026-09-24 起）：显示到哪一级由下面的「空间自适应」实测决定，档位只作为 `data-zoom-tier` 这类观测锚点保留。
 - 缩放值不持久化，进页面固定 1x：避免用户上次放大后误以为课表只有三天。
 
-### 缩放的两段式：手势期预览 → 落定（2026-10-11 起）
+### 缩放的两段式：手势期预览 → 落定（2026-11-06 修正预览几何）
 
-捏合时**不做真实重排**（每次改宽度都会强制整文档布局，实测 202ms 长任务 / 67% 的 CPU 花在
-`overflows()` 的强制布局上）。改为「按住时用合成层变换假装放大，松手后一次性落定」：
+捏合时**不做真实重排**（每次改宽度都会强制整文档布局，历史实测 202ms 长任务 / 67% 的 CPU 花在
+`overflows()` 的强制布局上）。改为「按住时用合成层变换预览完整内容，松手后一次性落定」：
 
 ```
 idle ──pointerdown/touchstart──> preview ──手势结束──> settling ──过渡结束──> idle
 ```
 
-- **preview**：只写 `[data-schedule-zoom-stage]` 上的内联 `transform`，不动网格宽度、不动
-  `--schedule-zoom`、不测任何格子。换算 `translateX(centerX × (1 − k)) scaleX(k)`，
-  `transform-origin: 0 0`。同时给该节点挂 `blur(3px)`（合成的放大本就模糊，主动糊掉比让它
-  露出拉伸的字形更自然）。
-- **settling**：手指抬起后把档位真正落下去 —— `setCellLayoutTier(tier)` → 写 `--schedule-zoom`
-  → 写 `scrollLeft`（`(scrollLeft + centerX) × ratio − centerX`）→ **同一帧清掉变换与模糊**，
-  再淡出模糊（120ms）。前两步的顺序是硬约束：先写 `scrollLeft` 会按旧宽度夹取。
-- 落定读的是**预计算排布**（见下节），命中即零格子测量；静止态必须回到「无内联
-  `transform` / `filter` / `transition`」。
+- **preview**：真实网格宽度、React 档位与课程格测量全部冻结。只写 `[data-schedule-grid]` 上的内联
+  `transform: translateX(...) scaleX(...)`，网格必须有 `origin-top-left`；外层
+  `[data-schedule-zoom-stage]` 只承担固定尺寸的裁剪与相位锚点，**不得再缩放视口本身**。
+- **焦点与覆盖**：进入手势时冻结 `startScrollLeft / viewportWidth / contentWidth`，把视口焦点换成内容坐标
+  `contentCenterX = startScrollLeft + scrollCenterX`。未触边时 `tx = contentCenterX × (1 − k)`；同时用
+  `tx ≤ startScrollLeft`、`tx ≥ startScrollLeft + viewportWidth − contentWidth × k` 钳位，保证缩放后的完整内容
+  覆盖视口。到达边缘 / 最小档位时**覆盖优先于焦点不动**，禁止再把窗口缩成半宽。逐帧不得重读这些几何量。
+- **settling**：在同一网格上把 transform 过渡到目标比例。起止点都经过覆盖钳位；边界随 scale 线性变化，
+  同一缓动的中间帧也保持覆盖。2026-10 的整表 `blur(3px)` + 120ms 淡出已删除；按用户复核后的明确选择，
+  仅在缩放相位给课程框内 `[data-course-content]` 设置 `blur(0.8px)`，软化 scaleX 的字形变化。
+  卡片、描边、网格、表头与出勤角标均不模糊，不做滤镜淡出。
+- **commit**：`setCellLayoutTier(tier)` → 写 `--schedule-zoom` → 清网格 transform / transition 与 stage 相位
+  → 写 `scrollLeft` → 提交一次 React 档位并恢复测量。先清预览再写滚动位置，确保按真实目标内容的滚动范围
+  钳位；所有写入在同一任务完成，不绘制中间态。
+- 落定读取**预计算排布**（见下节），命中即零格子测量；静止态必须回到「网格无内联
+  `transform` / `filter` / `transition`，stage 无相位属性，课程文字计算 filter 为 `none`」。
+  `prefers-reduced-motion: reduce` 仍直接落定。
 
 **受控例外（本条覆盖上面「不引入任何等比缩放」的表述）**：变换只允许出现在 `preview` /
-`settling` 两个显式相位、只允许 `scaleX` + `translateX`、只允许挂在 stage 上，且静止态必须被
-清空。禁止项不变：不得用 CSS `zoom`、不得 `transform: scale`、不得把变换挂在网格或滚容器上
-（会污染 `scrollWidth` 与边缘阻尼判定）。`zoomPreview.ts` 是这些常量与换算的单一真源，
-`scheduleSourceGuard.test.ts` 用白名单守住这条边界。
+`settling` 两个显式相位、只允许 `scaleX` + `translateX`、只允许挂在完整网格上，且静止态必须清空。
+禁止项不变：不得用 CSS `zoom`、不得 `transform: scale`、不得把缩放变换挂在外层 stage 或滚容器上。
+`zoomPreview.ts` 是比例、焦点与覆盖钳位的单一真源，`scheduleSourceGuard.test.ts` 守住这条边界。
+内容放大时可能暂时扩大视觉溢出；双指开始仍会让边缘切周 reset，落定前清变换，终态 `scrollWidth`
+必须恢复真实档位宽度。验收关注实际滚动/切周行为，不再把「预览期 scrollWidth 数字绝不变」误当目标。
 
-**观测锚点**：stage 上的 `data-schedule-zoom-preview` 取值 `preview` / `settling`，静止态不存在。
+**观测锚点**：stage 上的 `data-schedule-zoom-preview` 取值 `preview` / `settling`，静止态不存在；
+transform / transition 读网格，不读 stage。
 
 ### 档位排布预计算（2026-10-11 起）
 
@@ -299,7 +309,7 @@ slotKey     = geometryKey + 内容 + 档位
 
 `useScheduleZoom()` 的约定：
 
-- 手势期间**不 setState**：直接写 `--schedule-zoom` CSS 变量（只触发样式重算），并按捏合中心补偿 `scrollLeft`；松手才 `setZoom(snapZoomTier(...))` 提交一次，避免每帧重渲染 7×12 网格。
+- 手势期间**不 setState**：只在完整网格上写合成器 `transform`，不改 `--schedule-zoom`、不做课程格测量；松手才一次性提交真实档位。详见上方「缩放的两段式」。
 - 只改宽度的实现依赖 `min-width: calc(100% * var(--schedule-zoom))`：`var` 为 1 时恰好不溢出，这是「1x 无横向滚动」的机理，下界必须精确等于 1（`ZOOM_MIN`）。
 - 滚容器必须有 `[touch-action:pan-x_pan-y]`：排除 WebView 自带的 pinch-zoom，同时保留单指滚动。
 - 双指手势外，触摸端的双击用两次 `pointerup` 的间隔与位移自行判定（部分 WebView 不派发 `dblclick`）；鼠标走 `onDoubleClick`。
@@ -387,9 +397,9 @@ export function deriveSectionTimes(classes: Class[]): Record<number, SectionTime
 | `data-course-parity` | 单双周徽标 | 1x 可见、桌面端 `display: none`（由 CSS 断点决定，不是「不在 DOM 里」） |
 | `data-course-out-of-week` | 非本周课程块 | 判定「淡化显示非本周课程」是否生效、灰色态是否渲染 |
 | `data-schedule-zoom-control` | 缩放浮层 | 手机端在、桌面端不在 DOM |
-| `data-schedule-swipe-stage` / `data-schedule-zoom-stage` | 滚容器的外层裁剪层 | 定位 stage；确认尺寸分配由「stage + 滚容器」两层承担、数字与改动前一致；缩放预览的 `transform` / `filter` 只允许写在这一层 |
+| `data-schedule-swipe-stage` / `data-schedule-zoom-stage` | 滚容器的外层固定裁剪层 | 定位 stage；确认尺寸分配由「stage + 滚容器」两层承担；缩放时只读相位，**不得在这里写 transform / filter** |
 | `data-course-key` | 课程块按钮（= 内容签名） | 排布缓存的内容键锚点；预热靠它枚举克隆里的格子（克隆会去掉 `data-course-cell`） |
-| `data-schedule-zoom-preview` | 同一个 stage | `'preview'` \| `'settling'`；静止态必须不存在（有值就说明有残留的预栅格状态） |
+| `data-schedule-zoom-preview` | 同一个 stage | `'preview'` \| `'settling'`；静止态必须不存在；实际 transform / transition 写在 `[data-schedule-grid]` |
 | `data-schedule-zoom-warmup` | 离屏预热宿主的 div | 预热只在空闲窗口存在，取值是正在预热的档位；断言静止态不存在即可确认预热已收摊 |
 | `data-week-swipe-state` | 滚容器（**命令式写，不在 React 树里**） | `'idle'` \| `'dragging'` \| `'switching'`；开关关闭或未启用时该属性不存在 |
 | `data-current-week` | 顶栏「第 N 周」span | 断言切周是否发生、切到哪一周（不依赖中文文案） |
@@ -473,6 +483,21 @@ agent-browser eval "String(document.querySelectorAll('[data-course-cell]').lengt
 - `verify-cell-layout.mjs` + `run-cell-layout-verify.sh` —— 360 / 412 / 1440 三个视口 × 1x/2x × 跨周，逐格断言
   「教室恒显、可丢行顺序不倒挂、字号在 8–15px、文字块不宽于容器且不水平溢出、内容溢出必须已走兜底」。
   改课程格测量后必跑；历史基线 18 格三视口全绿。
+
+### 缩小覆盖、课程文字局部模糊与缩放性能验收（2026-11-06 起）
+
+当前任务的一键工具位于 `.trellis/tasks/11-06-schedule-zoom-out-blank/research/`（归档后直接运行旧目录的脚本会因相对层级变化找不到仓库根，应使用复制到当前任务的 runner）：
+
+```bash
+# 前置：pnpm build
+bash .trellis/tasks/11-06-schedule-zoom-out-blank/research/run-zoom-coverage.sh
+bash .trellis/tasks/11-06-schedule-zoom-out-blank/research/run-zoom-perf.sh 1
+```
+
+- `run-zoom-coverage.sh`：双指 / ± / 双击 + reduce，逐中间态断言完整网格覆盖滚动内容盒、stage / grid 不模糊、每个 `[data-course-content]` 为 `blur(0.8px)`、网格原点为 0 0；静止态文字 filter 全部恢复 none，并检查终态和 `scrollWidth` 恢复。不能只验松手后的截图。
+- `run-zoom-perf.sh`：真实 CDP 双指交替捏开/捏拢四轮，脚本直接断言手势期无 ≥50ms 长任务、最大帧间隔 ≤50ms、真实布局宽与 React 档位冻结。
+- 归档探针只用于历史对照；修改当前产品后必须运行上两条**产品路径**，不能用规划期临时 DOM 注入结果替代。
+
 ---
 
 ## Common Mistakes
@@ -511,9 +536,10 @@ agent-browser eval "String(document.querySelectorAll('[data-course-cell]').lengt
 - 让课程格在自己的 `useLayoutEffect` 里同步「写 display / 字号 → 读 `scrollHeight`」地适配：翻周时新课程格集中挂载，每次读写都强制整张网格重排。实测松手切周产生 672–824ms 主线程长任务、动画卡住 1.0–1.3s（Chrome 155 / 412×731 / 18 格）。必须走 `cellLayout.ts` 的共享队列，分阶段批量读写。
 - 给课程格测量 effect 留空依赖数组（`}` 后不带 `[...]`）：每次 render 都重建任务并入队，配色 / 出勤角标 / 回调引用变化都会触发全网格重测。依赖只写**内容**（`course.name` / `classroom` / `teacher` / `parityLabel` / `note`）。
 - 在 `ResizeObserver` 回调里不比对尺寸直接入队：`observe()` 会立刻回调一次，与首帧测量重复；回调必须先比较 `contentRect` 宽高，没真变就不入队。
-- 在缩放手势里实时改网格宽度（哪怕节流到每 100ms）：每次改宽都让 `cellLayout` 队列重排全网格，实测捏合 200ms 产生 202ms 长任务、67% 的 CPU 花在 `overflows()` 的强制布局上。手势期只允许 stage 上的 `scaleX` 预览，宽度只在落定那一刻改一次。
-- 把预览用的 `transform` / `filter` 挂在网格或滚容器上（而不是 stage）：网格的 `transform` 会被算进滚动溢出区域，`scrollWidth` 与边缘阻尼判定当场被污染；预览只允许挂在 stage 上，静止态必须清空内联值。
-- 落定时先写 `scrollLeft` 再改 `--schedule-zoom`：会按**旧**宽度夹取滚动位置（2x 下本来就超不出旧宽度，落定后位置全错）。顺序是「档位 → 宽度 → scrollLeft → 清变换」。
+- 在缩放手势里实时改网格宽度（哪怕节流到每 100ms）：每次改宽都让 `cellLayout` 队列重排全网格，历史实测捏合 200ms 产生 202ms 长任务。手势期只允许完整网格上的 `scaleX` 预览，真实宽度只在落定那一刻改一次。
+- 把缩放预览挂在外层 stage / 滚动视口上：缩小时缩小的是窗口本身，2x→1x 会留下半屏空白。必须缩放完整网格，焦点换算成内容坐标并做覆盖钳位；公式使用左上角原点，网格的 `origin-top-left` 不能漏。
+- 给缩放中的整表加固定 `blur(3px)` 或在落定后继续淡出：性能读数不增加不代表观感细腻，网格线与卡片也会发虚。若需要掩饰字形形变，只允许对缩放相位的 `[data-course-content]` 加局部 `blur(0.8px)`，静止即恢复。
+- 落定时在清预览前写 `scrollLeft`：可能按临时视觉溢出而非真实目标宽度钳位。顺序是「档位 → 宽度 → 清网格变换/相位 → scrollLeft」。
 - 用 `getComputedStyle` 的列模板（或容器内容盒高度）做排布缓存的几何键：前者已把档位算成像素值、后者会被水平滚动条在档位间翻来覆去（548 ↔ 533），键随档位翻转的结果是「刚算好的档位每次换挡就被丢掉」。几何键取「滚容器内容宽 × 网格自身高度 × 内联列模板 × 断点」。
 - 用「几何变了就清空快照表」当简化手段：手机的 2x 会因水平滚动条让容器内容盒矮 15px，几何键在档位间来回翻转时会把另一档刚算好的条目整表扔掉。几何键应当进每条条目的键，换几何只是查不到。
 - 在 `ResizeObserver` 回调里把几何「推」给缓存：观察者回调在渲染步骤末尾才跑，必然晚一帧，而落定后的第一批查询就在下一帧 —— 键晚一帧则换挡后第一批查询必然落空。几何要由缓存在批次开头**按需读**。

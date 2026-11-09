@@ -1,0 +1,506 @@
+[
+  {
+    "scrollRatio": 0,
+    "centerRatio": 0.25,
+    "scale": 0.75,
+    "before": {
+      "scrollLeft": 0,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 0,
+      "raw": 23.6875,
+      "min": -189.5,
+      "max": 0,
+      "left": 1,
+      "right": 569.5,
+      "viewportWidth": 379,
+      "scrollLeft": 0,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": 1,
+      "right": 569.5,
+      "scrollLeft": 0,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 0,
+    "centerRatio": 0.25,
+    "scale": 0.5,
+    "before": {
+      "scrollLeft": 0,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 0,
+      "raw": 47.375,
+      "min": 0,
+      "max": 0,
+      "left": 1,
+      "right": 380,
+      "viewportWidth": 379,
+      "scrollLeft": 0,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": 1,
+      "right": 380,
+      "scrollLeft": 0,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 0,
+    "centerRatio": 0.5,
+    "scale": 0.75,
+    "before": {
+      "scrollLeft": 0,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 0,
+      "raw": 47.375,
+      "min": -189.5,
+      "max": 0,
+      "left": 1,
+      "right": 569.5,
+      "viewportWidth": 379,
+      "scrollLeft": 0,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": 1,
+      "right": 569.5,
+      "scrollLeft": 0,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 0,
+    "centerRatio": 0.5,
+    "scale": 0.5,
+    "before": {
+      "scrollLeft": 0,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 0,
+      "raw": 94.75,
+      "min": 0,
+      "max": 0,
+      "left": 1,
+      "right": 380,
+      "viewportWidth": 379,
+      "scrollLeft": 0,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": 1,
+      "right": 380,
+      "scrollLeft": 0,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 0,
+    "centerRatio": 0.75,
+    "scale": 0.75,
+    "before": {
+      "scrollLeft": 0,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 0,
+      "raw": 71.0625,
+      "min": -189.5,
+      "max": 0,
+      "left": 1,
+      "right": 569.5,
+      "viewportWidth": 379,
+      "scrollLeft": 0,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": 1,
+      "right": 569.5,
+      "scrollLeft": 0,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 0,
+    "centerRatio": 0.75,
+    "scale": 0.5,
+    "before": {
+      "scrollLeft": 0,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 0,
+      "raw": 142.125,
+      "min": 0,
+      "max": 0,
+      "left": 1,
+      "right": 380,
+      "viewportWidth": 379,
+      "scrollLeft": 0,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": 1,
+      "right": 380,
+      "scrollLeft": 0,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 0.5,
+    "centerRatio": 0.25,
+    "scale": 0.75,
+    "before": {
+      "scrollLeft": 190,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 71.1875,
+      "raw": 71.1875,
+      "min": 0.5,
+      "max": 190,
+      "left": -117.8125,
+      "right": 450.6875,
+      "viewportWidth": 379,
+      "scrollLeft": 190,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": -117.8125,
+      "right": 450.6875,
+      "scrollLeft": 190,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 0.5,
+    "centerRatio": 0.25,
+    "scale": 0.5,
+    "before": {
+      "scrollLeft": 190,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 190,
+      "raw": 142.375,
+      "min": 190,
+      "max": 190,
+      "left": 1,
+      "right": 380,
+      "viewportWidth": 379,
+      "scrollLeft": 190,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": 1,
+      "right": 380,
+      "scrollLeft": 190,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 0.5,
+    "centerRatio": 0.5,
+    "scale": 0.75,
+    "before": {
+      "scrollLeft": 190,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 94.875,
+      "raw": 94.875,
+      "min": 0.5,
+      "max": 190,
+      "left": -94.125,
+      "right": 474.375,
+      "viewportWidth": 379,
+      "scrollLeft": 190,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": -94.125,
+      "right": 474.375,
+      "scrollLeft": 190,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 0.5,
+    "centerRatio": 0.5,
+    "scale": 0.5,
+    "before": {
+      "scrollLeft": 190,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 190,
+      "raw": 189.75,
+      "min": 190,
+      "max": 190,
+      "left": 1,
+      "right": 380,
+      "viewportWidth": 379,
+      "scrollLeft": 190,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": 1,
+      "right": 380,
+      "scrollLeft": 190,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 0.5,
+    "centerRatio": 0.75,
+    "scale": 0.75,
+    "before": {
+      "scrollLeft": 190,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 118.5625,
+      "raw": 118.5625,
+      "min": 0.5,
+      "max": 190,
+      "left": -70.4375,
+      "right": 498.0625,
+      "viewportWidth": 379,
+      "scrollLeft": 190,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": -70.4375,
+      "right": 498.0625,
+      "scrollLeft": 190,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 0.5,
+    "centerRatio": 0.75,
+    "scale": 0.5,
+    "before": {
+      "scrollLeft": 190,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 190,
+      "raw": 237.125,
+      "min": 190,
+      "max": 190,
+      "left": 1,
+      "right": 380,
+      "viewportWidth": 379,
+      "scrollLeft": 190,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": 1,
+      "right": 380,
+      "scrollLeft": 190,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 1,
+    "centerRatio": 0.25,
+    "scale": 0.75,
+    "before": {
+      "scrollLeft": 379,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 189.5,
+      "raw": 118.4375,
+      "min": 189.5,
+      "max": 379,
+      "left": -188.5,
+      "right": 380,
+      "viewportWidth": 379,
+      "scrollLeft": 379,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": -188.5,
+      "right": 380,
+      "scrollLeft": 379,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 1,
+    "centerRatio": 0.25,
+    "scale": 0.5,
+    "before": {
+      "scrollLeft": 379,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 379,
+      "raw": 236.875,
+      "min": 379,
+      "max": 379,
+      "left": 1,
+      "right": 380,
+      "viewportWidth": 379,
+      "scrollLeft": 379,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": 1,
+      "right": 380,
+      "scrollLeft": 379,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 1,
+    "centerRatio": 0.5,
+    "scale": 0.75,
+    "before": {
+      "scrollLeft": 379,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 189.5,
+      "raw": 142.125,
+      "min": 189.5,
+      "max": 379,
+      "left": -188.5,
+      "right": 380,
+      "viewportWidth": 379,
+      "scrollLeft": 379,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": -188.5,
+      "right": 380,
+      "scrollLeft": 379,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 1,
+    "centerRatio": 0.5,
+    "scale": 0.5,
+    "before": {
+      "scrollLeft": 379,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 379,
+      "raw": 284.25,
+      "min": 379,
+      "max": 379,
+      "left": 1,
+      "right": 380,
+      "viewportWidth": 379,
+      "scrollLeft": 379,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": 1,
+      "right": 380,
+      "scrollLeft": 379,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 1,
+    "centerRatio": 0.75,
+    "scale": 0.75,
+    "before": {
+      "scrollLeft": 379,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 189.5,
+      "raw": 165.8125,
+      "min": 189.5,
+      "max": 379,
+      "left": -188.5,
+      "right": 380,
+      "viewportWidth": 379,
+      "scrollLeft": 379,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": -188.5,
+      "right": 380,
+      "scrollLeft": 379,
+      "scrollWidth": 758
+    }
+  },
+  {
+    "scrollRatio": 1,
+    "centerRatio": 0.75,
+    "scale": 0.5,
+    "before": {
+      "scrollLeft": 379,
+      "scrollWidth": 758,
+      "viewportWidth": 379,
+      "contentWidth": 758
+    },
+    "immediate": {
+      "translateX": 379,
+      "raw": 331.625,
+      "min": 379,
+      "max": 379,
+      "left": 1,
+      "right": 380,
+      "viewportWidth": 379,
+      "scrollLeft": 379,
+      "scrollWidth": 758
+    },
+    "afterFrame": {
+      "left": 1,
+      "right": 380,
+      "scrollLeft": 379,
+      "scrollWidth": 758
+    }
+  }
+]

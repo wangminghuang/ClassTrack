@@ -204,6 +204,12 @@ body {
   }
 }
 
+/* 缩放只软化课程框内的文字，掩饰 scaleX 的字形变化；卡片、描边、网格、表头与出勤角标都保持清晰。
+   相位属性在落定的同一任务里移除，因此文字直接恢复清晰，不再带整表模糊或淡出延迟。 */
+[data-schedule-zoom-preview] [data-course-content] {
+  filter: blur(0.8px);
+}
+
 .markdown-editor-shell {
   min-height: 0;
   min-width: 0;

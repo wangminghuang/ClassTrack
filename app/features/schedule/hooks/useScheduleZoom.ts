@@ -5,9 +5,6 @@ import { ZOOM_MAX, ZOOM_MIN, ZOOM_TIERS } from '../constants'
 import { clampZoom, getDetailLevel, snapZoomTier } from '../utils'
 import { TAP_MOVE_TOLERANCE_PX, isTapSizedMove } from '../weekSwipe'
 import {
-  PREVIEW_BLUR_OUT_MS,
-  PREVIEW_BLUR_PX,
-  blurFilter,
   formatPreviewTransform,
   prefersReducedMotion,
   previewScale,
@@ -39,18 +36,22 @@ type GestureState = {
   startDistance: number
   /** 手势过程中最新的连续缩放值，松手时用来吸附档位。 */
   liveZoom: number
-  /** 预览变换的原点：捏合中心在合成层局部坐标下的 X。 */
-  stageCenterX: number
+  /** 预览焦点：捏合中心在完整网格内容坐标下的 X（含起始滚动偏移）。 */
+  contentCenterX: number
   /** 捏合中心相对滚动容器可视区左边缘的 X，落定时补偿 `scrollLeft` 用。 */
   scrollCenterX: number
   /** 进入手势时的 `scrollLeft`；预览期不滚动，落定时直接用它当基准。 */
   startScrollLeft: number
+  /** 进入手势时的完整网格布局宽度；变换后的覆盖范围以它为基准。 */
+  contentWidth: number
+  /** 进入手势时的滚动视口内容宽度；用于边界钳位。 */
+  viewportWidth: number
 }
 
 /**
  * 过渡的收尾工作。
  *
- * 这四样都会在「还没到时候」时被下一次手势或按钮点击打断，因此必须集中登记、统一撤销：
+ * 这两项都会在「还没到时候」时被下一次手势或按钮点击打断，因此必须集中登记、统一撤销：
  * 漏掉任何一个，都会在落定后留下一个按老现场执行的闭包。
  */
 type ScheduledWork = {
@@ -58,10 +59,6 @@ type ScheduledWork = {
   settleTimer: number | null
   /** 落定过渡的 `transitionend` 监听。 */
   settleListener: ((event: TransitionEvent) => void) | null
-  /** 模糊淡出的起始帧。 */
-  blurFrame: number | null
-  /** 模糊淡出结束后的清场计时器。 */
-  blurTimer: number | null
 }
 
 /** 触摸端双击判定的最大间隔。 */
@@ -80,61 +77,63 @@ const DOUBLE_TAP_TOGGLE_DEBOUNCE_MS = 400
  * 过渡收尾的兜底余量。
  *
  * `transitionend` 在后台标签页里可能不派发，过渡被同帧的另一处样式写入打断时也不会派发；
- * 超时兜底保证落定一定会发生 —— 多等几十毫秒只影响时序，不影响终态。模糊淡出同理。
+ * 超时兜底保证落定一定会发生 —— 多等几十毫秒只影响时序，不影响终态。
  */
 const TRANSITION_TIMEOUT_MARGIN_MS = 120
-
-/**
- * 模糊淡出后清场内联样式所用的余量。
- *
- * 比 {@link TRANSITION_TIMEOUT_MARGIN_MS} 小得多：这里的计时器是**主**收尾手段（没有
- * `transitionend` 监听），余量只需要覆盖定时器抖动 —— 即使比过渡早一帧触发也无害，
- * 淡出的终值本来就是 `none`。留太大会让「内联 `transition` 已清空」这个静止态判据
- * 在观感上已经结束之后还继续为假。
- */
-const BLUR_CLEANUP_MARGIN_MS = 50
 
 function distanceBetween(first: PointerPosition, second: PointerPosition) {
   return Math.hypot(first.x - second.x, first.y - second.y)
 }
 
+/** 把一次手势冻结的几何交给纯函数核；调用时只换 scale，不重读任何 DOM。 */
+function formatGesturePreview(gesture: GestureState, scale: number): string {
+  return formatPreviewTransform(
+    previewTransform({
+      scale,
+      centerX: gesture.contentCenterX,
+      startScrollLeft: gesture.startScrollLeft,
+      contentWidth: gesture.contentWidth,
+      viewportWidth: gesture.viewportWidth,
+    })
+  )
+}
+
 /**
- * 收掉预览留在合成层上的全部内联写法。
+ * 收掉预览留在完整网格上的全部内联写法。
  *
- * 静止态必须是「干净」的：`transform` / `filter` / `transition` 三样一个都不许残留，
+ * 静止态必须是「干净」的：网格上的 `transform` / `filter` / `transition` 一样都不许残留，
  * 否则课表会带着一个隐形的合成层继续存在，后续任何改动都在错误的坐标系里发生。
  *
- * @param stage 承载预览变换的合成层，即 `[data-schedule-zoom-stage]` 那个手势裁剪层。
+ * @param stage 固定尺寸的裁剪层，只保留缩放相位观测锚点。
+ * @param grid 承载预览变换的完整课表内容。
  */
-function clearPreviewStyle(stage: HTMLElement | null): void {
-  if (!stage) return
+function clearPreviewStyle(stage: HTMLElement | null, grid: HTMLElement | null): void {
+  if (stage) delete stage.dataset.scheduleZoomPreview
+  if (!grid) return
 
-  stage.style.removeProperty('transform')
-  stage.style.removeProperty('filter')
-  stage.style.removeProperty('transition')
-  delete stage.dataset.scheduleZoomPreview
+  grid.style.removeProperty('transform')
+  grid.style.removeProperty('filter')
+  grid.style.removeProperty('transition')
 }
 
 /**
  * 手机端课表的缩放走「合成层预览 → 一次性落定」，三条入口（双指 / `−`+ / 双击）共用一个落定实现。
  *
- * **手势期（`preview`）**：整个课表用一层 `scaleX` + 反向平移的合成层跟手，`transform-origin`
- * 落在捏合中心，因此手指下的内容点全程不动。这一段只写样式 —— 不改 `--schedule-zoom`
- * （也就不会触发任何课程格的 `ResizeObserver`）、不读布局，帧代价与课程格内容量无关。
+ * **手势期（`preview`）**：完整课表网格用一层 `scaleX` + 平移的合成层跟手，滚动视口本身固定。
+ * `transform-origin` 为左上角，焦点先换算到含 `scrollLeft` 的内容坐标，再按完整内容的覆盖边界钳位。
+ * 这一段只写样式 —— 不改 `--schedule-zoom`（也就不会触发任何课程格的 `ResizeObserver`）、不读布局，
+ * 帧代价与课程格内容量无关。
  *
- * 预览层是**近似**的：它等比拉伸的是整个可视窗口，而真实档位只把列宽放大、节次列与字号
- * 都不变，所以节次列附近会有一段最大 `2rem × (k − 1)` 的横向偏差。预览只在手指按住时
- * 存在，落定后立刻由真实排布取代，因此这点偏差不需要（也无法）消除。
+ * 预览层是**近似**的：它横向变换的是原档位排布，而真实档位会重新推导列宽与字号。缩到边缘时
+ * 优先保证内容覆盖视口，不为了绝对固定焦点留下半屏空白。落定后由真实排布取代，全程不加模糊。
  *
  * **落定期（`settling`）**：松手时把连续值吸附到 `ZOOM_TIERS` 之一，合成层再用
  * `SETTLE_DURATION_MS` 的缓动滑到「目标档位 / 起始档位」这个终点比例，过渡结束后交给
  * {@link commit}。`−`/`+` 与双击没有手势阶段，从比例 1 起走同一条路径。
  *
- * **提交（回到 `idle`）**：宽度变更、`scrollLeft` 补偿、收掉变换在同一帧完成 —— 因为
- * `scrollLeft` 的补偿量与合成层的平移量同源（都是「捏合中心不动」），且过渡终点与真实排布的
- * 盒子几何重合，所以这一帧只有格子里的文字在重排，整块课表不会位移。模糊多留一个绘制帧
- * 再淡出，把这一帧的重排盖住（`prefers-reduced-motion: reduce` 时不加模糊、过渡时长为 0，
- * 终态与动画路径逐字节一致）。
+ * **提交（回到 `idle`）**：宽度变更、清空变换、`scrollLeft` 补偿在同一帧完成 —— 先清预览再写
+ * 滚动位置，保证浏览器按目标档位的真实滚动范围钳位。因为预览以完整内容为对象且做了覆盖钳位，
+ * 这一帧不会在缩小方向留下半屏空白。`prefers-reduced-motion: reduce` 时过渡时长为 0，终态一致。
  *
  * @returns 已提交档位、信息分级、三个 DOM 引用、需要挂到滚动容器上的事件处理器，
  * 以及给 −/+ 按钮与双击使用的档位操作。
@@ -150,7 +149,7 @@ export function useScheduleZoom() {
   /** 当前处在状态机的哪一段（`idle` → `preview` / `settling` → `idle`）。 */
   const phaseRef = useRef<ZoomPhase>('idle')
   /** 过渡的收尾工作，统一登记以便被下一次手势打断。 */
-  const workRef = useRef<ScheduledWork>({ settleTimer: null, settleListener: null, blurFrame: null, blurTimer: null })
+  const workRef = useRef<ScheduledWork>({ settleTimer: null, settleListener: null })
 
   const lastToggleRef = useRef(0)
 
@@ -161,110 +160,88 @@ export function useScheduleZoom() {
    */
   const cancelScheduledWork = () => {
     const work = workRef.current
-    const stage = zoomStageRef.current
-    if (work.settleListener && stage) stage.removeEventListener('transitionend', work.settleListener)
+    const grid = gridRef.current
+    if (work.settleListener && grid) grid.removeEventListener('transitionend', work.settleListener)
     if (work.settleTimer !== null) clearTimeout(work.settleTimer)
-    if (work.blurFrame !== null) cancelAnimationFrame(work.blurFrame)
-    if (work.blurTimer !== null) clearTimeout(work.blurTimer)
 
-    workRef.current = { settleTimer: null, settleListener: null, blurFrame: null, blurTimer: null }
+    workRef.current = { settleTimer: null, settleListener: null }
   }
 
   /**
-   * 进入 `preview` / `settling` 的共同准备：打断上一次过渡 → 冻结测量 → 打观测锚点 → 按需上模糊。
+   * 进入 `preview` / `settling` 的共同准备：打断上一次过渡 → 冻结测量 → 打观测锚点。
    *
    * 锚点值就是状态名本身，因此「现在处在哪一段」可以直接从 DOM 读出来（AC3/AC4 的断言点）。
+   * 预览保持文字清晰，不再给整表挂模糊滤镜。
    *
    * @param phase 要进入的状态：`preview`（跟手）或 `settling`（过渡到档位）。
    */
   const enterZoomState = (phase: ZoomPhase) => {
     const stage = zoomStageRef.current
-    if (!stage) return
+    if (!stage || !gridRef.current) return
 
     cancelScheduledWork()
     suspendCellLayout()
     phaseRef.current = phase
     stage.dataset.scheduleZoomPreview = phase
-    // 减少动效时不加模糊：模糊同样是为了掩盖形变，属于动效的一部分（R7）。
-    if (!prefersReducedMotion()) stage.style.filter = blurFilter(PREVIEW_BLUR_PX)
   }
 
-  /** 把当前预览比例写进合成层；只有样式写入，没有布局读取。 */
+  /** 把当前预览比例写进完整网格；只有样式写入，没有布局读取。 */
   const renderPreview = () => {
-    const stage = zoomStageRef.current
+    const grid = gridRef.current
     const gesture = gestureRef.current
-    if (!stage || !gesture) return
+    if (!grid || !gesture) return
 
     const scale = previewScale(gesture.liveZoom, gesture.committedTier)
-    stage.style.transform = formatPreviewTransform(previewTransform(scale, gesture.stageCenterX))
+    grid.style.transform = formatGesturePreview(gesture, scale)
   }
 
   /** 中止预览：不改档位、不改宽度，直接回到静止态（异常指针序列会走这里）。 */
   const abortPreview = () => {
     cancelScheduledWork()
-    clearPreviewStyle(zoomStageRef.current)
+    clearPreviewStyle(zoomStageRef.current, gridRef.current)
     gestureRef.current = null
     phaseRef.current = 'idle'
     resumeCellLayout()
   }
 
-  /** 进入预览：读一次几何 → 冻结测量 → 挂上模糊与观测锚点。 */
+  /** 进入预览：读一次完整内容与视口几何 → 冻结测量 → 挂上观测锚点。 */
   const beginPreview = (first: PointerPosition, second: PointerPosition) => {
     const stage = zoomStageRef.current
     const scroll = scrollRef.current
-    if (!stage || !scroll) return
+    const grid = gridRef.current
+    if (!stage || !scroll || !grid) return
 
     // 整个手势只在这里读布局。
-    const stageRect = stage.getBoundingClientRect()
     const scrollRect = scroll.getBoundingClientRect()
+    const startScrollLeft = scroll.scrollLeft
     const centerClientX = (first.x + second.x) / 2
+    const scrollCenterX = centerClientX - scrollRect.left - scroll.clientLeft
 
     gestureRef.current = {
       committedTier: zoom,
       startDistance: Math.max(distanceBetween(first, second), 1),
       liveZoom: zoom,
-      stageCenterX: centerClientX - stageRect.left,
-      scrollCenterX: centerClientX - scrollRect.left,
-      startScrollLeft: scroll.scrollLeft,
+      contentCenterX: startScrollLeft + scrollCenterX,
+      scrollCenterX,
+      startScrollLeft,
+      contentWidth: grid.offsetWidth,
+      viewportWidth: scroll.clientWidth,
     }
 
     enterZoomState('preview')
     // 跟手就是跟手：预览期不允许任何补间，否则画面会稳定落后手指一帧以上。
-    stage.style.transition = 'none'
+    grid.style.transition = 'none'
     renderPreview()
-  }
-
-  /**
-   * 落定后延迟一个绘制帧再淡出模糊。
-   *
-   * 落定帧本身要重排（宽度落地），模糊留着正好把那一帧盖住；下一帧才开始淡出，读起来是
-   * 「对焦」而不是「闪一下」。淡出结束后把 `filter` / `transition` 一并清掉，回到静止态。
-   */
-  const scheduleBlurOut = () => {
-    const stage = zoomStageRef.current
-    if (!stage || !stage.style.filter) return
-
-    workRef.current.blurFrame = window.requestAnimationFrame(() => {
-      workRef.current.blurFrame = null
-      stage.style.transition = `filter ${PREVIEW_BLUR_OUT_MS}ms linear`
-      stage.style.filter = ''
-      workRef.current.blurTimer = window.setTimeout(() => {
-        workRef.current.blurTimer = null
-        stage.style.removeProperty('transition')
-        stage.style.removeProperty('filter')
-      }, PREVIEW_BLUR_OUT_MS + BLUR_CLEANUP_MARGIN_MS)
-    })
   }
 
   /**
    * 落定：一次性把真实排布换上，并收掉预览。
    *
    * 顺序不能换：先声明档位（`setCellLayoutTier`，本帧末到来的 `ResizeObserver` 回声要靠它命中
-   * 预计算缓存）→ 再改宽度（写 `--schedule-zoom`）→ 再补 `scrollLeft`（写 `scrollLeft` 会强制
-   * 一次排版，必须在宽度变更之后，否则会被旧的滚动范围截断）→ 最后收掉变换。
+   * 预计算缓存）→ 再改宽度 → 清掉预览变换 → 最后补 `scrollLeft`。先清变换再写滚动位置，
+   * 保证浏览器按目标档位的真实滚动范围钳位，而不是按临时预览的视觉溢出范围钳位。
    *
-   * 变换之所以能直接清掉而不跳：过渡的终点比例取「目标档位 / 起始档位」，与真实排布在这一帧
-   * 的盒子几何完全重合，屏上只有格子里的文字在重排。模糊留给 `scheduleBlurOut` 淡出。
+   * 这些写入在同一个任务里完成，不会把中间态画到屏上。真实内容直接以清晰排布出现，不再用模糊遮盖。
    *
    * @param tier 目标档位（`ZOOM_TIERS` 之一）。
    */
@@ -288,50 +265,43 @@ export function useScheduleZoom() {
     // 档位必须在同一个任务里先声明：回声到达时队列已经需要它才能命中缓存。
     setCellLayoutTier(tier)
     if (grid) grid.style.setProperty('--schedule-zoom', String(tier))
+    clearPreviewStyle(stage, grid)
     if (scroll) scroll.scrollLeft = nextScrollLeft
-
-    if (stage) {
-      stage.style.removeProperty('transform')
-      stage.style.removeProperty('transition')
-      delete stage.dataset.scheduleZoomPreview
-    }
 
     gestureRef.current = null
     phaseRef.current = 'idle'
     // 档位与 state 相同时 React 不会重渲染，网格上的内联变量由上面那一次写入负责。
     setZoom(tier)
     resumeCellLayout()
-    scheduleBlurOut()
   }
 
   /**
-   * 落定：把合成层从当前比例过渡到目标档位的比例，过渡结束后 {@link commit}。
+   * 落定：把完整网格从当前比例过渡到目标档位的比例，过渡结束后 {@link commit}。
    *
-   * 目标比例取「目标档位 / 起始档位」，因此过渡终点与真实排布的盒子几何重合 —— 落定那一帧
-   * 清掉变换时屏上内容不位移，只有格子里的文字重排。
+   * 起止点都经过同一套覆盖钳位；由于边界随 scale 线性变化，同一缓动插值出的中间帧也保持覆盖。
    *
    * @param targetTier 目标档位（`ZOOM_TIERS` 之一）。
    */
   const settleTo = (targetTier: number) => {
     const stage = zoomStageRef.current
+    const grid = gridRef.current
     const gesture = gestureRef.current
-    if (!stage || !gesture) return
+    if (!stage || !grid || !gesture) return
 
     const { durationMs, easing, targetScale } = resolveSettle({
       targetScale: tierScaleRatio(gesture.committedTier, targetTier),
       reducedMotion: prefersReducedMotion(),
     })
     const fromScale = previewScale(gesture.liveZoom, gesture.committedTier)
-    const target = formatPreviewTransform(previewTransform(targetScale, gesture.stageCenterX))
+    const target = formatGesturePreview(gesture, targetScale)
 
     phaseRef.current = 'settling'
     stage.dataset.scheduleZoomPreview = 'settling'
 
-    // 没有可播的过渡（减少动效、或比例本来就在目标上）：摆到终点直接落定 ——
-    // 终态与动画路径逐字节一致，差别只在「有没有那一百八十毫秒」。
+    // 没有可播的过渡（减少动效、或比例本来就在目标上）：摆到终点直接落定。
     if (durationMs === 0 || targetScale === fromScale) {
-      stage.style.transition = 'none'
-      stage.style.transform = target
+      grid.style.transition = 'none'
+      grid.style.transform = target
       commit(targetTier)
       return
     }
@@ -343,11 +313,11 @@ export function useScheduleZoom() {
     workRef.current.settleListener = finish
     // 兜底：过渡事件可能不派发（后台标签页、被同帧的另一处样式写入打断），超时直接落定。
     workRef.current.settleTimer = window.setTimeout(() => commit(targetTier), durationMs + TRANSITION_TIMEOUT_MARGIN_MS)
-    stage.addEventListener('transitionend', finish)
+    grid.addEventListener('transitionend', finish)
 
     // 「同一批写入里设 transition + 改 transform」就会起过渡：起始值是上一帧已生效的样式。
-    stage.style.transition = `transform ${durationMs}ms ${easing}`
-    stage.style.transform = target
+    grid.style.transition = `transform ${durationMs}ms ${easing}`
+    grid.style.transform = target
   }
 
   /**
@@ -361,22 +331,25 @@ export function useScheduleZoom() {
   const requestTier = (resolveNext: (current: number) => number) => {
     const stage = zoomStageRef.current
     const scroll = scrollRef.current
-    if (!stage || !scroll) return
+    const grid = gridRef.current
+    if (!stage || !scroll || !grid) return
 
     const targetTier = resolveNext(zoom)
     // 已经在目标档位、也没有正在播的过渡：无事可做。
     if (targetTier === zoom && phaseRef.current === 'idle') return
 
     // 打断上一次过渡：把现场重建到「刚刚提交的档位」这个基准上。
-    const stageRect = stage.getBoundingClientRect()
-    const scrollRect = scroll.getBoundingClientRect()
+    const startScrollLeft = scroll.scrollLeft
+    const scrollCenterX = scroll.clientWidth / 2
     gestureRef.current = {
       committedTier: zoom,
       startDistance: 1,
       liveZoom: zoom,
-      stageCenterX: stageRect.width / 2,
-      scrollCenterX: scrollRect.width / 2,
-      startScrollLeft: scroll.scrollLeft,
+      contentCenterX: startScrollLeft + scrollCenterX,
+      scrollCenterX,
+      startScrollLeft,
+      contentWidth: grid.offsetWidth,
+      viewportWidth: scroll.clientWidth,
     }
 
     enterZoomState('settling')
@@ -499,7 +472,7 @@ export function useScheduleZoom() {
   useEffect(
     () => () => {
       cancelScheduledWork()
-      clearPreviewStyle(zoomStageRef.current)
+      clearPreviewStyle(zoomStageRef.current, gridRef.current)
       gestureRef.current = null
       phaseRef.current = 'idle'
       resumeCellLayout()

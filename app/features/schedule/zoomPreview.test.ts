@@ -2,12 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_TIERS } from './constants'
 import { SNAP_BACK_DURATION_MS } from './weekSwipe'
 import {
-  PREVIEW_BLUR_OUT_MS,
-  PREVIEW_BLUR_PX,
   REDUCED_MOTION_DURATION_MS,
   SETTLE_DURATION_MS,
   SETTLE_EASING,
-  blurFilter,
   clampPreviewScale,
   formatPreviewTransform,
   prefersReducedMotion,
@@ -17,26 +14,35 @@ import {
   resolveSettle,
   tierScaleRatio,
 } from './zoomPreview'
+import type { PreviewGeometry } from './zoomPreview'
 
 /** 预览期间出现过的代表性比例：捏开到底 2、捏回到底 0.5、以及中间态。 */
 const SCALES = [0.5, 0.75, 1, 1.25, 1.5, 2]
+
+/** 默认几何有足够平移空间；具体边界用例再覆盖对应字段。 */
+function transformAt(scale: number, overrides: Partial<PreviewGeometry> = {}) {
+  return previewTransform({
+    scale,
+    centerX: 300,
+    startScrollLeft: 100,
+    contentWidth: 800,
+    viewportWidth: 200,
+    ...overrides,
+  })
+}
 
 describe('缩放两段式常量', () => {
   it('过渡时长与既有手势动画同一量级，不引入第二套时长口径', () => {
     expect(SETTLE_DURATION_MS).toBe(180)
     expect(Math.abs(SETTLE_DURATION_MS - SNAP_BACK_DURATION_MS)).toBeLessThanOrEqual(60)
-    expect(PREVIEW_BLUR_OUT_MS).toBe(120)
-    expect(PREVIEW_BLUR_PX).toBe(3)
   })
 
   it('减少动效时过渡时长必须是 0（不许出现「短一点但仍在播」的中间态）', () => {
     expect(REDUCED_MOTION_DURATION_MS).toBe(0)
   })
 
-  it('缓动是三次贝塞尔字符串，且模糊取值可读', () => {
+  it('缓动是三次贝塞尔字符串', () => {
     expect(SETTLE_EASING.startsWith('cubic-bezier(')).toBe(true)
-    expect(blurFilter()).toBe(`blur(${PREVIEW_BLUR_PX}px)`)
-    expect(blurFilter(4)).toBe('blur(4px)')
   })
 })
 
@@ -74,33 +80,35 @@ describe('预览比例', () => {
 describe('预览变换', () => {
   it('比例为 1 时不平移', () => {
     for (const centerX of [-200, 0, 137.5, 379]) {
-      expect(previewTransform(1, centerX)).toEqual({ translateX: 0, scaleX: 1 })
+      expect(transformAt(1, { centerX })).toEqual({ translateX: 0, scaleX: 1 })
     }
   })
 
   it('负中心点与比例为 1 相遇时归一化 -0，样式里不出现 translateX(-0px)', () => {
-    const { translateX } = previewTransform(1, -200)
+    const { translateX } = transformAt(1, { centerX: -200 })
 
     expect(Object.is(translateX, -0)).toBe(false)
     expect(formatPreviewTransform({ translateX: -0, scaleX: 1 })).toBe('translateX(0px) scaleX(1)')
   })
 
-  it('捏合中心在任何比例下都固定在原地', () => {
-    for (const centerX of [0, 40, 189.5, 379]) {
+  it('未触边时，内容焦点在任何比例下都固定在原视口位置', () => {
+    const startScrollLeft = 200
+    for (const centerX of [250, 300, 400]) {
       for (const scale of SCALES) {
-        const { translateX, scaleX } = previewTransform(scale, centerX)
+        const { translateX, scaleX } = transformAt(scale, { centerX, startScrollLeft })
 
-        expect(centerX * scaleX + translateX).toBeCloseTo(centerX, 9)
+        expect(centerX * scaleX + translateX - startScrollLeft).toBeCloseTo(centerX - startScrollLeft, 9)
       }
     }
   })
 
-  it('放大时向左平移、缩小时向右平移（单调）', () => {
-    const centerX = 200
+  it('有平移空间时，放大向左、缩小向右', () => {
+    const centerX = 400
+    const startScrollLeft = 100
     let previous = Number.NEGATIVE_INFINITY
 
     for (const scale of SCALES) {
-      const { translateX } = previewTransform(scale, centerX)
+      const { translateX } = transformAt(scale, { centerX, startScrollLeft })
       if (scale > 1) expect(translateX).toBeLessThan(0)
       if (scale < 1) expect(translateX).toBeGreaterThan(0)
       previous = Math.max(previous, -translateX)
@@ -109,9 +117,53 @@ describe('预览变换', () => {
     expect(previous).toBe(centerX)
   })
 
+  it('左边缘收到最小比例时放弃焦点补偿，完整内容恰好铺满', () => {
+    const result = transformAt(0.5, { centerX: 100, startScrollLeft: 0, contentWidth: 800, viewportWidth: 400 })
+    const left = result.translateX
+    const right = left + 800 * result.scaleX
+
+    expect(result.translateX).toBe(0)
+    expect(left).toBe(0)
+    expect(right).toBe(400)
+  })
+
+  it('右边缘收到最小比例时同样铺满，不留下半屏空白', () => {
+    const result = transformAt(0.5, { centerX: 600, startScrollLeft: 400, contentWidth: 800, viewportWidth: 400 })
+    const left = result.translateX - 400
+    const right = left + 800 * result.scaleX
+
+    expect(result.translateX).toBe(400)
+    expect(left).toBe(0)
+    expect(right).toBe(400)
+  })
+
+  it('中间滚动位置保持焦点，同时覆盖整个视口', () => {
+    const result = transformAt(0.75, { centerX: 400, startScrollLeft: 200, contentWidth: 800, viewportWidth: 400 })
+    const left = result.translateX - 200
+    const right = left + 800 * result.scaleX
+
+    expect(result.translateX).toBe(100)
+    expect(400 * result.scaleX + result.translateX - 200).toBe(200)
+    expect(left).toBeLessThanOrEqual(0)
+    expect(right).toBeGreaterThanOrEqual(400)
+  })
+
+  it('异常输入把内容缩得比视口窄时居中，而不是把空缺全留在一侧', () => {
+    const result = transformAt(0.25, { centerX: 200, startScrollLeft: 0, contentWidth: 400, viewportWidth: 800 })
+    const left = result.translateX
+    const right = left + 400 * result.scaleX
+
+    expect(left).toBe(350)
+    expect(right).toBe(450)
+  })
+
   it('拼出的字符串可读且只有两位小数', () => {
-    expect(formatPreviewTransform(previewTransform(1.5, 100))).toBe('translateX(-50px) scaleX(1.5)')
-    expect(formatPreviewTransform(previewTransform(1.2345, 33))).toBe('translateX(-7.74px) scaleX(1.2345)')
+    expect(formatPreviewTransform(transformAt(1.5, { centerX: 100, startScrollLeft: 0, contentWidth: 758, viewportWidth: 379 }))).toBe(
+      'translateX(-50px) scaleX(1.5)'
+    )
+    expect(formatPreviewTransform(transformAt(1.2345, { centerX: 33, startScrollLeft: 0, contentWidth: 758, viewportWidth: 379 }))).toBe(
+      'translateX(-7.74px) scaleX(1.2345)'
+    )
   })
 })
 

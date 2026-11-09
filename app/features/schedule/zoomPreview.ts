@@ -10,8 +10,8 @@ import { ZOOM_MAX, ZOOM_MIN } from './constants'
  *
  * 因此缩放被拆成两段：
  *
- * - **预览**：网格宽度不变，变换挂在 `[data-schedule-swipe-stage]`（祖先裁剪层），
- *   跟手 1:1，不触发布局、不读 DOM；
+ * - **预览**：网格宽度不变，`translateX` / `scaleX` 挂在完整的 `[data-schedule-grid]` 上，
+ *   固定的是滚动视口、缩放的是内容；跟手 1:1，不触发布局、不读 DOM；
  * - **落定**：预览比例用一段合成器动画过渡到目标档位比例，动画结束后把真实宽度与
  *   预计算排布一次性落定，并清空变换。
  *
@@ -19,7 +19,7 @@ import { ZOOM_MAX, ZOOM_MIN } from './constants'
  * 「要不要播动画」的判定。任何需要 DOM 读取的步骤都不属于这里。
  *
  * 单位口径：`scale` 一律是**相对当前已提交档位的比例**（1 = 与已提交档位同宽），
- * 不是绝对缩放值；`centerX` 一律是**变换宿主（stage）局部坐标**下的 X。
+ * 不是绝对缩放值；`centerX` 一律是**完整网格内容坐标**下的 X（含起始滚动偏移）。
  */
 
 /** 缩放两段式的显式状态；`idle` 之外的任何状态都必须带着可被清空的变换。 */
@@ -37,27 +37,16 @@ const PREVIEW_SCALE_MIN = 0.25
 /** 预览比例的上界：`ZOOM_MAX / ZOOM_MIN`，跟着档位常量走，不另写一份数字。 */
 const PREVIEW_SCALE_MAX = ZOOM_MAX / ZOOM_MIN
 
-/**
- * 预览期的模糊半径。
- *
- * 浏览器实测：0 / 2 / 4px 三档的帧数与长任务读数完全相同（`research/control-blur.json`），
- * 所以模糊是「免费」的，取中间值用它盖住 `scaleX` 带来的横向形变。
- */
-export const PREVIEW_BLUR_PX = 3
-
 /** 落定过渡时长。与 `weekSwipe.ts` 的 `SNAP_BACK_DURATION_MS` 同一量级，不引入第二套时长口径。 */
 export const SETTLE_DURATION_MS = 180
 
 /** 落定过渡缓动：收尾缓出，让「宽度真正落地那一帧」出现在速度已接近 0 的时候。 */
 export const SETTLE_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 
-/** 落定之后模糊的淡出时长：把宽度落地那一次重排遮在模糊里，观感是「对焦」而不是「卡一下」。 */
-export const PREVIEW_BLUR_OUT_MS = 120
-
 /** `prefers-reduced-motion: reduce` 时的过渡时长（R7：不播动画，直接落定）。 */
 export const REDUCED_MOTION_DURATION_MS = 0
 
-/** 预览变换的两项；`translateX` 单位是 stage 局部 CSS px。 */
+/** 预览变换的两项；`translateX` 单位是完整网格内容坐标下的 CSS px。 */
 export type PreviewTransform = {
   translateX: number
   scaleX: number
@@ -89,25 +78,42 @@ export function previewScale(liveZoom: number, committedTier: number): number {
 }
 
 /**
- * 预览变换：`translateX(tx) scaleX(k)`，其中 `tx = centerX * (1 - k)`。
+ * 一次内容预览需要的冻结几何。所有 X 都使用完整网格内容坐标，调用方不得在手势中途重读。
  *
- * 这条式子的唯一目的是**把捏合中心钉在原地**：内容点 `centerX` 变换后落在
- * `centerX * k + tx = centerX`。因此它只依赖一个不变量，可以单测钉住（见 `zoomPreview.test.ts`）。
- *
- * 之所以能直接用 CSS 过渡插值：`tx` 是 `k` 的仿射函数、且 `centerX` 在一次过渡里是常量，
- * 而过渡对 `translateX` 与 `scaleX` 用同一条缓动曲线 ⇒ 中间任意时刻仍然满足
- * `tx(t) = centerX * (1 - k(t))`，捏合中心全程不动。
- *
- * @param scale 目标预览比例。
- * @param centerX 捏合中心在变换宿主局部坐标下的 X。
- * @returns 可直接写进 `transform` 的两项。
+ * `startScrollLeft` 只用于把「内容坐标」换算到「视口坐标」，预览期不会真的滚动。
  */
-export function previewTransform(scale: number, centerX: number): PreviewTransform {
-  const scaleX = clampPreviewScale(scale)
-  const translateX = centerX * (1 - scaleX)
+export type PreviewGeometry = {
+  scale: number
+  centerX: number
+  startScrollLeft: number
+  contentWidth: number
+  viewportWidth: number
+}
 
-  // 归一化 -0：`centerX` 为负、比例为 1 时 `centerX * 0` 得到 `-0`，会让样式里出现
-  // `translateX(-0px)`，也会让「不平移」的断言变成假失败。
+/**
+ * 预览变换：`translateX(tx) scaleX(k)`，先按内容焦点求 `tx`，再按视口覆盖边界钳位。
+ *
+ * 未触边时 `tx = centerX × (1-k)`：焦点内容点变换后再减冻结的 `startScrollLeft`，仍落在原视口位置。
+ * 但缩到左右边缘或最小档位时，固定焦点与「内容铺满视口」不能同时满足，此时覆盖优先：
+ *
+ * - `tx ≤ startScrollLeft`，保证内容左缘不晚于视口左缘；
+ * - `tx ≥ startScrollLeft + viewportWidth - contentWidth × k`，保证内容右缘不早于视口右缘。
+ *
+ * 正常缩放最小为 1x，因此完整内容总能铺满。异常输入若把内容缩得比视口还窄，则取边界中点居中，
+ * 不把不可避免的空缺全推到一侧。调用方必须让网格的 `transform-origin` 为 `0 0`。
+ *
+ * @param geometry 连续比例与进入手势时冻结的内容/视口几何。
+ * @returns 可直接写进完整网格 `transform` 的两项。
+ */
+export function previewTransform(geometry: PreviewGeometry): PreviewTransform {
+  const scaleX = clampPreviewScale(geometry.scale)
+  const rawTranslateX = geometry.centerX * (1 - scaleX)
+  const minTranslateX = geometry.startScrollLeft + geometry.viewportWidth - geometry.contentWidth * scaleX
+  const maxTranslateX = geometry.startScrollLeft
+  const translateX =
+    minTranslateX <= maxTranslateX ? Math.min(Math.max(rawTranslateX, minTranslateX), maxTranslateX) : (minTranslateX + maxTranslateX) / 2
+
+  // 归一化 -0，避免样式里出现 `translateX(-0px)`，也让「不平移」断言不受浮点零号影响。
   return { translateX: translateX === 0 ? 0 : translateX, scaleX }
 }
 
@@ -169,11 +175,6 @@ export function resolveSettle(input: { targetScale: number; reducedMotion: boole
  */
 export function resolveCommitScrollLeft(input: { scrollLeft: number; centerX: number; ratio: number }): number {
   return (input.scrollLeft + input.centerX) * input.ratio - input.centerX
-}
-
-/** `filter` 的模糊取值。 */
-export function blurFilter(blurPx: number = PREVIEW_BLUR_PX): string {
-  return `blur(${blurPx}px)`
 }
 
 /**

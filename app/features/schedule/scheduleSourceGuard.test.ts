@@ -121,19 +121,16 @@ describe('schedule 目录源码守卫', () => {
 })
 
 /**
- * 回归守卫（任务 `10-11-schedule-zoom-jank`）：缩放的预览变换是**受控例外**。
+ * 回归守卫（任务 `11-06-schedule-zoom-out-blank`）：缩放固定视口、变换完整内容。
  *
  * 规范（`mobile-schedule-layout.md`「缩放的两段式」）允许在 `preview` / `settling` 两个相位里、
- * 在 stage 上写 `scaleX` + `translateX` 与一层模糊；除此之外：
+ * 在完整网格上写 `scaleX` + `translateX`；除此之外：
  * - 静止态必须无内联 `transform` / `filter` / `transition`；
- * - 变换只许挂在 stage，不许挂在网格或滚容器（网格上的 transform 会计入滚动溢出区域，
- *   污染 `scrollWidth` 与边缘阻尼判定）；
- * - 模糊半径、时长这些数值只许有 `zoomPreview.ts` 一份真源。
- *
- * 这些断言都是真机上真实发生过或险些发生的回归，不是洁癖。
+ * - 不许再缩放外层 stage 或滚动视口，否则缩小时窗口自身变成半宽；
+ * - 网格必须显式使用左上角原点，且全程不再用整表高斯模糊。
  */
 describe('缩放预览的受控例外边界', () => {
-  /** 允许写内联 `transform` / `filter` 的文件：缩放预览（stage）与横滑跟手（滚容器）。 */
+  /** 允许写内联 `transform` / `filter` 的文件：缩放预览（完整网格）与横滑跟手（滚容器）。 */
   const TRANSFORM_WRITERS = ['hooks/useScheduleZoom.ts', 'hooks/useWeekSwipeGesture.ts']
 
   function relative(file: string): string {
@@ -162,24 +159,25 @@ describe('缩放预览的受控例外边界', () => {
     }
   })
 
-  it('缩放预览的每一次变换写入都以 stage 为目标', () => {
+  it('缩放预览的每一次变换、滤镜清理与过渡写入都以完整 grid 为目标', () => {
     const hook = codeLines(readFileSync(join(SCHEDULE_DIR, 'hooks/useScheduleZoom.ts'), 'utf8'))
-    const writes = hook.filter((line) => /\.style\.(transform|filter)\b/.test(line))
+    const writes = hook.filter((line) => /\.style\.(transform|filter|transition)\b/.test(line))
 
     expect(writes.length).toBeGreaterThan(0)
     for (const line of writes) {
-      // 目标变量必须就是 `stage`（= `zoomStageRef.current`），不许是网格/滚容器/格子。
-      expect(line).toContain('stage.style.')
+      expect(line).toContain('grid.style.')
     }
   })
 
-  it('缩放预览不碰网格与滚容器的内联样式', () => {
+  it('固定视口与外层 stage 不得再承担缩放变换', () => {
     const hook = readFileSync(join(SCHEDULE_DIR, 'hooks/useScheduleZoom.ts'), 'utf8')
 
-    expect(hook).not.toMatch(/gridRef\.current\.style/)
     expect(hook).not.toMatch(/scrollRef\.current\.style\.(transform|filter)/)
-    // 表组件里一律不许出现内联变换（stage 的 ref 也在这里，写它必须走 hook）。
-    expect(readFileSync(join(SCHEDULE_DIR, 'ScheduleTable.tsx'), 'utf8')).not.toContain('.style.transform')
+    expect(hook).not.toMatch(/stage\.style\.(transform|filter|transition)/)
+    expect(hook).toContain('clearPreviewStyle(stage, grid)')
+    expect(hook).toContain('contentCenterX: startScrollLeft + scrollCenterX')
+    expect(hook).toContain('contentWidth: grid.offsetWidth')
+    expect(hook).toContain('viewportWidth: scroll.clientWidth')
   })
 
   it('不使用 CSS zoom，也不用 transform: scale', () => {
@@ -196,17 +194,25 @@ describe('缩放预览的受控例外边界', () => {
     expect(offenders).toEqual([])
   })
 
-  it('预览模糊半径只许有 zoomPreview.ts 一份真源', () => {
+  it('状态机不得再给整表写高斯模糊', () => {
     const offenders: string[] = []
 
     for (const file of FILES) {
-      if (relative(file) === 'zoomPreview.ts') continue
       for (const line of codeLines(readFileSync(file, 'utf8'))) {
         if (/blur\(\s*\d/.test(line)) offenders.push(`${relative(file)}: ${line.trim()}`)
       }
     }
 
     expect(offenders).toEqual([])
+  })
+
+  it('缩放模糊只落在课程文字内容，不覆盖卡片、表头或网格', () => {
+    const css = readFileSync(join(SCHEDULE_DIR, '../../app.css'), 'utf8')
+    const cell = readFileSync(join(SCHEDULE_DIR, 'ScheduleCourseCell.tsx'), 'utf8')
+
+    expect(css).toContain('[data-schedule-zoom-preview] [data-course-content]')
+    expect(css).toContain('filter: blur(0.8px);')
+    expect(cell).toContain('<span data-course-content')
   })
 
   it('过渡时长不许写数值字面量（必须引常量）', () => {
@@ -217,14 +223,16 @@ describe('缩放预览的受控例外边界', () => {
     expect(readFileSync(join(SCHEDULE_DIR, 'hooks/useScheduleZoom.ts'), 'utf8')).toContain("from '../zoomPreview'")
   })
 
-  it('stage 节点同时带裁剪层与缩放预览两个锚点', () => {
+  it('固定 stage 保留裁剪与相位锚点，完整网格显式使用左上角原点', () => {
     const table = readFileSync(join(SCHEDULE_DIR, 'ScheduleTable.tsx'), 'utf8')
     const stageAt = table.indexOf('data-schedule-zoom-stage')
+    const gridAt = table.indexOf('data-schedule-grid')
 
     expect(stageAt).toBeGreaterThan(-1)
-    // 变换挂在这一层，正是靠 `overflow-hidden` 把预览多出来的部分裁掉（否则会撑出横向滚动）。
     expect(table).toContain('data-schedule-swipe-stage data-schedule-zoom-stage')
     expect(table.slice(stageAt, stageAt + 200)).toContain('overflow-hidden')
     expect(table).toContain('ref={zoomStageRef}')
+    expect(gridAt).toBeGreaterThan(-1)
+    expect(table.slice(gridAt, gridAt + 1200)).toContain('origin-top-left')
   })
 })
